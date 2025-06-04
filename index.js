@@ -9,10 +9,6 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Connect to MongoDB Atlas
-const uri = process.env.MONGODB_URI;
-mongoose.connect(uri);
-
 const subGenreSchema = new mongoose.Schema({
   name: String,
   genre: String
