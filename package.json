@@ -1,6 +1,6 @@
 {
   "name": "mongodb-express-app",
-  "module": "index.ts",
+  "module": "index.js",
   "type": "module",
   "private": true,
   "devDependencies": {
