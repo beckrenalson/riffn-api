@@ -7,9 +7,7 @@ dotenv.config(); // Load environment variables
 
 // Connect to MongoDB Atlas
 
-
-const uri = process.env.MONGODB_URI;
-mongoose.connect(uri);
+mongoose.connect(process.env.MONGODB_URI);
 
 const app = express();
 app.use(express.json());
@@ -102,7 +100,7 @@ app.post('/instruments', async (req, res) => {
   }
 });
 
-app.get('/signup', async (req, res) => {
+app.get('/users', async (req, res) => {
   try {
     const user = await User.find();
     res.json(user);
@@ -111,7 +109,7 @@ app.get('/signup', async (req, res) => {
   }
 });
 
-app.post('/signup', async (req, res) => {
+app.post('/users', async (req, res) => {
   try {
   const user = new User(req.body);
   await user.save();
@@ -126,8 +124,8 @@ app.post('/signup', async (req, res) => {
 //     res.json(student);
 // });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
-  console.log('Server running');
+  console.log('Server running on ', {PORT});
 });
