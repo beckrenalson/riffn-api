@@ -5,7 +5,7 @@ import dotenv from 'dotenv';
 
 dotenv.config(); // Load environment variables
 
-// Connect to MongoDB AtlasAdd commentMore actions
+// Connect to MongoDB Atlas
 
 
 const uri = process.env.MONGODB_URI;
