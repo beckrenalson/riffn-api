@@ -63,18 +63,18 @@ app.get('/subgenres/:genre', async (req, res) => {
 
 app.post('/subgenres', async (req, res) => {
   try {
-  const subgenres = new SubGenre(req.body);
-  await subgenres.save();
-  res.json(subgenres);
+    const subgenres = new SubGenre(req.body);
+    await subgenres.save();
+    res.json(subgenres);
   } catch (error) {
     res.status(500).json({ error: 'Server error' })
   }
 });
 
 app.get('/instruments', async (req, res) => {
-  try{
-  const instruments = await Instrument.find();
-  res.json(instruments);
+  try {
+    const instruments = await Instrument.find();
+    res.json(instruments);
   } catch (error) {
     res.status(500).json({ error: 'Server error' })
   }
@@ -82,9 +82,9 @@ app.get('/instruments', async (req, res) => {
 
 app.get('/instruments/:type', async (req, res) => {
   try {
-  const { type } = req.params
-  const query = await Instrument.find({ type });
-  res.json(query);
+    const { type } = req.params
+    const query = await Instrument.find({ type });
+    res.json(query);
   } catch (error) {
     res.status(500).json({ error: 'Server error' })
   }
@@ -92,9 +92,9 @@ app.get('/instruments/:type', async (req, res) => {
 
 app.post('/instruments', async (req, res) => {
   try {
-  const instruments = new Instrument(req.body);
-  await instruments.save();
-  res.json(instruments);
+    const instruments = new Instrument(req.body);
+    await instruments.save();
+    res.json(instruments);
   } catch (error) {
     res.status(500).json({ error: 'Server error' })
   }
@@ -111,13 +111,34 @@ app.get('/users', async (req, res) => {
 
 app.post('/users', async (req, res) => {
   try {
-  const user = new User(req.body);
-  await user.save();
-  res.json(user);
+    const user = new User(req.body);
+    await user.save();
+    res.json(user);
   } catch (error) {
     res.status(500).json({ error: 'Server error' })
   }
 });
+
+app.patch('/users/:id', async (req, res) => {
+  try {
+    const updatedUser = await User.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true }
+    );
+
+    if (!updatedUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json(updatedUser);
+  } catch (error) {
+    console.error('Error updating user:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+
 
 // app.get('/students/:id', async (req, res) => {
 //     const student = await Student.findById(req.params.id);
@@ -127,5 +148,5 @@ app.post('/users', async (req, res) => {
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
-  console.log('Server running on ', {PORT});
+  console.log('Server running on ', { PORT });
 });
