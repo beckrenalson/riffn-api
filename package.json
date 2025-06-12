@@ -1,6 +1,6 @@
 {
   "name": "mongodb-express-app",
-  "module": "index.js",
+  "module": "server.js",
   "type": "module",
   "private": true,
   "devDependencies": {
@@ -16,7 +16,8 @@
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "mongodb": "^6.17.0",
-    "mongoose": "^8.15.1"
+    "mongoose": "^8.15.1",
+    "multer": "^2.0.1"
   },
   "scripts": {
     "start": "node index.js"

@@ -2,6 +2,7 @@ import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors'
 import dotenv from 'dotenv';
+import multer from 'multer';
 
 dotenv.config(); // Load environment variables
 
@@ -9,6 +10,7 @@ dotenv.config(); // Load environment variables
 
 mongoose.connect(process.env.MONGODB_URI);
 
+const upload = multer({ dest: 'uploads/' });
 const app = express();
 app.use(express.json());
 app.use(cors());
@@ -29,13 +31,20 @@ const instrumentSchema = new mongoose.Schema({
 const Instrument = mongoose.model('Instrument', instrumentSchema)
 
 const userSchema = new mongoose.Schema({
+  profileImage: String,
+  userName: String,
   firstName: String,
   lastName: String,
   email: String,
   password: String,
+  profileType: String,
   selectedInstruments: Array,
   selectedGenres: Array,
-  profile: String
+  openings: {
+    instruments: Array,
+    genres: Array
+  },
+  bandMembers: Array
 })
 
 const User = mongoose.model('User', userSchema)
@@ -109,13 +118,21 @@ app.get('/users', async (req, res) => {
   }
 });
 
-app.post('/users', async (req, res) => {
+app.post('/users', upload.single('profileImage'), async (req, res) => {
   try {
-    const user = new User(req.body);
+    console.log('Text fields:', req.body);
+    console.log('Uploaded file:', req.file);
+
+    const user = new User({
+      ...req.body,
+      profileImage: req.file?.path || null
+    });
+
     await user.save();
     res.json(user);
   } catch (error) {
-    res.status(500).json({ error: 'Server error' })
+    console.error('Error saving user:', error);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
