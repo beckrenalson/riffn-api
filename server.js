@@ -10,8 +10,21 @@ dotenv.config(); // Load environment variables
 
 mongoose.connect(process.env.MONGODB_URI);
 
-const upload = multer({ dest: 'uploads/' });
+import path from 'path';
+
+const storage = multer.diskStorage({
+  destination: 'uploads/',
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1E9)}${ext}`;
+    cb(null, uniqueName);
+  }
+});
+
+const upload = multer({ storage });
+
 const app = express();
+app.use('/uploads', express.static('uploads'));
 app.use(express.json());
 app.use(cors());
 
