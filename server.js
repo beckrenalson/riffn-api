@@ -53,6 +53,7 @@ const userSchema = new mongoose.Schema({
   profileType: String,
   selectedInstruments: Array,
   selectedGenres: Array,
+  location: String,
   openings: {
     instruments: Array,
     genres: Array
