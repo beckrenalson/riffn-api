@@ -1,0 +1,21 @@
+import mongoose from 'mongoose';
+
+const userSchema = new mongoose.Schema({
+    profileImage: String,
+    userName: String,
+    firstName: String,
+    lastName: String,
+    email: String,
+    password: String,
+    profileType: String,
+    selectedInstruments: Array,
+    selectedGenres: Array,
+    location: String,
+    openings: {
+        instruments: Array,
+        genres: Array
+    },
+    bandMembers: Array
+});
+
+export default mongoose.model('User', userSchema);
