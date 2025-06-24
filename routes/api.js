@@ -1,6 +1,7 @@
 import express from 'express';
 import multer from 'multer';
 import path from 'path';
+import bcrypt from 'bcrypt'
 
 import User from '../models/User.js';
 import Instrument from '../models/Instrument.js';
@@ -92,8 +93,11 @@ router.get('/users', async (req, res) => {
 
 router.post('/users', upload.single('profileImage'), async (req, res) => {
     try {
+        const hashedPassword = await bcrypt.hash(req.body.password, 10)
+
         const user = new User({
             ...req.body,
+            password: hashedPassword,
             profileImage: req.file?.path || null
         });
 
