@@ -15,7 +15,9 @@ const userSchema = new mongoose.Schema({
         instruments: Array,
         genres: Array
     },
-    bandMembers: Array
+    bandMembers: Array,
+    bio: String
+
 });
 
 export default mongoose.model('User', userSchema);
