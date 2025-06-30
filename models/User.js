@@ -11,10 +11,6 @@ const userSchema = new mongoose.Schema({
     selectedInstruments: Array,
     selectedGenres: Array,
     location: String,
-    openings: {
-        instruments: Array,
-        genres: Array
-    },
     bandMembers: Array,
     bio: String
 
