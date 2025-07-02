@@ -111,10 +111,19 @@ router.post('/users', upload.single('profileImage'), async (req, res) => {
 
 router.patch('/users/:id', async (req, res) => {
     try {
-        const updated = await User.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        const updateData = { ...req.body };
+
+        if (updateData.password) {
+            updateData.password = await bcrypt.hash(updateData.password, 10);
+        }
+
+        const updated = await User.findByIdAndUpdate(req.params.id, updateData, { new: true });
+
         if (!updated) return res.status(404).json({ error: 'User not found' });
+
         res.json(updated);
-    } catch {
+    } catch (error) {
+        console.error('Error updating user:', error);
         res.status(500).json({ error: 'Server error' });
     }
 });
