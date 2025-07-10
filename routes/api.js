@@ -2,16 +2,20 @@ import express from 'express';
 import multer from 'multer';
 import path from 'path';
 import bcrypt from 'bcrypt'
+import { fileURLToPath } from 'url';
 
 import User from '../models/User.js';
 import Instrument from '../models/Instrument.js';
 import SubGenre from '../models/SubGenre.js';
 
 const router = express.Router();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Configure Multer for file uploads
+
 const storage = multer.diskStorage({
-    destination: 'uploads/',
+    destination: path.join(__dirname, '..', 'uploads'), // go up one from routes/ to root, then into uploads/
     filename: (req, file, cb) => {
         const ext = path.extname(file.originalname);
         const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1E9)}${ext}`;
@@ -126,6 +130,17 @@ router.patch('/users/:id', async (req, res) => {
         console.error('Error updating user:', error);
         res.status(500).json({ error: 'Server error' });
     }
+});
+
+router.post('/uploads', upload.single('image'), (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    res.json({
+        filename: req.file.filename,
+        path: `/uploads/${req.file.filename}`
+    });
 });
 
 export default router;

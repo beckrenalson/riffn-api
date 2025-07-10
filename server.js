@@ -5,6 +5,8 @@ import dotenv from 'dotenv';
 import path from 'path';
 import apiRoutes from './routes/api.js';
 import authRoutes from './routes/auth.js';
+import { fileURLToPath } from 'url';
+
 
 dotenv.config();
 
@@ -12,11 +14,15 @@ mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('MongoDB connected'))
   .catch(err => console.error('MongoDB error:', err));
 
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const app = express();
 
 app.use(cors());
 app.use(express.json());
-app.use('/uploads', express.static(path.join('uploads')));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api', apiRoutes);
 app.use("/api/auth", authRoutes);
 
