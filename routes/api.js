@@ -3,9 +3,7 @@ dotenv.config();
 
 import express from 'express';
 import multer from 'multer';
-import path from 'path';
 import bcrypt from 'bcrypt'
-import { fileURLToPath } from 'url';
 import { v2 as cloudinary } from 'cloudinary';
 import { CloudinaryStorage } from 'multer-storage-cloudinary';
 
@@ -14,8 +12,6 @@ import Instrument from '../models/Instrument.js';
 import SubGenre from '../models/SubGenre.js';
 
 const router = express.Router();
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -104,18 +100,20 @@ router.get('/users', async (req, res) => {
     }
 });
 
-router.post('/users', upload.single('profileImage'), async (req, res) => {
+router.post('/users', async (req, res) => {
     try {
-        const hashedPassword = await bcrypt.hash(req.body.password, 10)
+        const { password, profileImage } = req.body;
+
+        const hashedPassword = await bcrypt.hash(password, 10);
 
         const user = new User({
             ...req.body,
             password: hashedPassword,
-            profileImage: req.file?.path || null
+            profileImage: profileImage || null
         });
 
         await user.save();
-        res.json(user);
+        res.status(201).json(user);
     } catch (error) {
         console.error('Error saving user:', error);
         res.status(500).json({ error: 'Server error' });
