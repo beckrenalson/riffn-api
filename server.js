@@ -1,14 +1,13 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import path from 'path';
 import apiRoutes from './routes/api.js';
 import authRoutes from './routes/auth.js';
 import { fileURLToPath } from 'url';
-
-
-dotenv.config();
 
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('MongoDB connected'))

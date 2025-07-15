@@ -1,9 +1,13 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import multer from 'multer';
 import path from 'path';
 import bcrypt from 'bcrypt'
-import mime from 'mime-types'
 import { fileURLToPath } from 'url';
+import { v2 as cloudinary } from 'cloudinary';
+import { CloudinaryStorage } from 'multer-storage-cloudinary';
 
 import User from '../models/User.js';
 import Instrument from '../models/Instrument.js';
@@ -13,19 +17,19 @@ const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Configure Multer for file uploads
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
-const storage = multer.diskStorage({
-    destination: path.join(__dirname, '..', 'uploads'), // go up one from routes/ to root, then into uploads/
-    filename: (req, file, cb) => {
-        let ext = path.extname(file.originalname);
-
-        if (!ext) {
-            ext = '.' + mime.extension(file.mimetype)
-        }
-        const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1E9)}${ext}`;
-        cb(null, uniqueName);
-    }
+const storage = new CloudinaryStorage({
+    cloudinary,
+    params: {
+        folder: 'riffn-profile-images', // optional folder in Cloudinary
+        allowed_formats: ['jpg', 'png', 'jpeg'],
+        transformation: [{ width: 800, height: 800, crop: 'limit' }],
+    },
 });
 
 const upload = multer({ storage });
@@ -143,8 +147,7 @@ router.post('/uploads', upload.single('image'), (req, res) => {
     }
 
     res.json({
-        filename: req.file.filename,
-        path: `/uploads/${req.file.filename}`
+        url: req.file.path, // Cloudinary's public URL
     });
 });
 
