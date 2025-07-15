@@ -2,6 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import path from 'path';
 import bcrypt from 'bcrypt'
+import mime from 'mime-types'
 import { fileURLToPath } from 'url';
 
 import User from '../models/User.js';
@@ -17,7 +18,11 @@ const __dirname = path.dirname(__filename);
 const storage = multer.diskStorage({
     destination: path.join(__dirname, '..', 'uploads'), // go up one from routes/ to root, then into uploads/
     filename: (req, file, cb) => {
-        const ext = path.extname(file.originalname);
+        let ext = path.extname(file.originalname);
+
+        if (!ext) {
+            ext = '.' + mime.extension(file.mimetype)
+        }
         const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1E9)}${ext}`;
         cb(null, uniqueName);
     }
