@@ -141,6 +141,20 @@ router.patch('/users/:id', async (req, res) => {
     }
 });
 
+router.post('/users/check-email', async (req, res) => {
+    const { email } = req.body;
+
+    if (!email) return res.status(400).json({ error: 'Email is required' });
+
+    const user = await User.findOne({ email });
+
+    if (user) {
+        return res.status(409).json({ error: 'Email already in use' });
+    } else {
+        return res.status(200).json({ available: true });
+    }
+});
+
 router.post('/uploads', upload.single('image'), (req, res) => {
     if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
