@@ -153,6 +153,23 @@ router.post('/users/check-email', async (req, res) => {
     }
 });
 
+router.delete('/users/:id', async (req, res) => {
+    try {
+        const deletedUser = await User.findByIdAndDelete(req.params.id);
+
+        if (!deletedUser) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Optionally, delete related resources here
+
+        res.json({ message: 'User account deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting user:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
 router.post('/uploads', upload.single('image'), (req, res) => {
     if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
