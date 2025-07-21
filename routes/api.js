@@ -6,6 +6,7 @@ import multer from 'multer';
 import bcrypt from 'bcrypt'
 import { v2 as cloudinary } from 'cloudinary';
 import { CloudinaryStorage } from 'multer-storage-cloudinary';
+import { body, validationResult } from 'express-validator'
 
 import User from '../models/User.js';
 import Instrument from '../models/Instrument.js';
@@ -50,16 +51,6 @@ router.get('/subgenres/:genre', async (req, res) => {
     }
 });
 
-router.post('/subgenres', async (req, res) => {
-    try {
-        const subgenre = new SubGenre(req.body);
-        await subgenre.save();
-        res.json(subgenre);
-    } catch {
-        res.status(500).json({ error: 'Server error' });
-    }
-});
-
 // Instruments
 router.get('/instruments', async (req, res) => {
     try {
@@ -80,16 +71,6 @@ router.get('/instruments/:type', async (req, res) => {
     }
 });
 
-router.post('/instruments', async (req, res) => {
-    try {
-        const instrument = new Instrument(req.body);
-        await instrument.save();
-        res.json(instrument);
-    } catch {
-        res.status(500).json({ error: 'Server error' });
-    }
-});
-
 // Users
 router.get('/users', async (req, res) => {
     try {
@@ -100,25 +81,45 @@ router.get('/users', async (req, res) => {
     }
 });
 
-router.post('/users', async (req, res) => {
-    try {
-        const { password, profileImage } = req.body;
+router.post('/users',
+    [
+        body('email')
+            .isEmail().withMessage('Invalid email address')
+            .normalizeEmail(),
+        body('password')
+            .isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
+        body('username')
+            .trim().notEmpty().withMessage('Username is required'),
+        body('profileImage')
+            .optional().isURL().withMessage('Profile image must be a valid URL'),
+        body('genres')
+            .isArray({ min: 1 }).withMessage('At least one genre must be selected'),
+        body('instruments')
+            .isArray({ min: 1 }).withMessage('At least one instrument must be selected'),
+    ],
+    async (req, res) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ errors: errors.array() });
+        }
 
-        const hashedPassword = await bcrypt.hash(password, 10);
+        try {
+            const { password, profileImage } = req.body;
+            const hashedPassword = await bcrypt.hash(password, 10);
 
-        const user = new User({
-            ...req.body,
-            password: hashedPassword,
-            profileImage: profileImage || null
-        });
+            const user = new User({
+                ...req.body,
+                password: hashedPassword,
+                profileImage: profileImage || null,
+            });
 
-        await user.save();
-        res.status(201).json(user);
-    } catch (error) {
-        console.error('Error saving user:', error);
-        res.status(500).json({ error: 'Server error' });
-    }
-});
+            await user.save();
+            res.status(201).json(user);
+        } catch (error) {
+            console.error('Error saving user:', error);
+            res.status(500).json({ error: 'Server error' });
+        }
+    });
 
 router.patch('/users/:id', async (req, res) => {
     try {
@@ -139,19 +140,48 @@ router.patch('/users/:id', async (req, res) => {
     }
 });
 
-router.post('/users/check-email', async (req, res) => {
-    const { email } = req.body;
+router.post("/users/check-details",
+    [
+        body("email")
+            .isEmail()
+            .withMessage("Invalid email address")
+            .normalizeEmail(),
+        body("firstName")
+            .trim()
+            .notEmpty()
+            .withMessage("First name is required"),
+        body("lastName")
+            .trim()
+            .notEmpty()
+            .withMessage("Last name is required"),
+        body("password")
+            .isLength({ min: 8 })
+            .withMessage("Password must be at least 8 characters long"),
+    ],
+    async (req, res) => {
+        const errors = validationResult(req);
 
-    if (!email) return res.status(400).json({ error: 'Email is required' });
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ errors: errors.array() });
+        }
 
-    const user = await User.findOne({ email });
+        const { email } = req.body;
 
-    if (user) {
-        return res.status(409).json({ error: 'Email already in use' });
-    } else {
-        return res.status(200).json({ available: true });
-    }
-});
+        try {
+            const user = await User.findOne({ email });
+
+            if (user) {
+                return res.status(409).json({
+                    errors: [{ param: "email", msg: "Email already in use" }],
+                });
+            }
+
+            return res.status(200).json({ available: true });
+        } catch (err) {
+            console.error("Error checking email:", err);
+            return res.status(500).json({ error: "Server error" });
+        }
+    });
 
 router.delete('/users/:id', async (req, res) => {
     try {
