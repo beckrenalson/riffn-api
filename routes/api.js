@@ -90,8 +90,6 @@ router.post('/users',
             .isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
         body('userName')
             .trim().notEmpty().withMessage('Username is required'),
-        body('profileImage')
-            .optional().isURL().withMessage('Profile image must be a valid URL'),
         body('selectedGenres')
             .isArray({ min: 1 }).withMessage('At least one genre must be selected'),
         body('selectedInstruments')
