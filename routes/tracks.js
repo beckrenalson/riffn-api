@@ -30,4 +30,17 @@ router.get("/:userId", async (req, res) => {
     }
 });
 
+router.delete("/:trackId", async (req, res) => {
+    try {
+        const deleted = await Track.findByIdAndDelete(req.params.trackId);
+        if (!deleted) {
+            return res.status(404).json({ message: "Track not found" });
+        }
+        res.status(200).json({ message: "Track deleted" });
+    } catch (err) {
+        console.error("Error deleting track:", err);
+        res.status(500).json({ message: "Internal Server Error" });
+    }
+});
+
 export default router
