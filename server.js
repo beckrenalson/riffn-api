@@ -22,7 +22,7 @@ const app = express();
 
 const allowedOrigins = [
   'http://localhost:5173',                    // dev
-  'https://riffn-app.vercel.app'     // prod
+  'https://riffn.vercel.app'     // prod
 ];
 
 app.use(cors({
