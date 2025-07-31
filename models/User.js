@@ -13,7 +13,7 @@ const userSchema = new mongoose.Schema({
     },
     password: {
         type: String,
-        require: true,
+        required: true,
         minlength: 8
     },
     profileType: String,
@@ -21,8 +21,15 @@ const userSchema = new mongoose.Schema({
     selectedGenres: Array,
     location: String,
     bandMembers: Array,
-    bio: String
+    bio: String,
+    credentials: [
+        {
+            credentialID: Buffer,
+            publicKey: Buffer,
+            counter: Number,
+        },
 
+    ],
 });
 
 export default mongoose.model('User', userSchema);

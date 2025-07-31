@@ -9,6 +9,7 @@ import apiRoutes from './routes/api.js';
 import trackRoutes from "./routes/tracks.js"
 import authRoutes from './routes/auth.js';
 import { fileURLToPath } from 'url';
+import session from 'express-session';
 
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('MongoDB connected'))
@@ -24,6 +25,17 @@ const allowedOrigins = [
   'http://localhost:5173',                    // dev
   'https://riffn.vercel.app'     // prod
 ];
+
+app.use(session({
+  secret: 'your-secret',
+  resave: false,
+  saveUninitialized: false, // <- important: don’t save empty sessions
+  cookie: {
+    secure: false, // true only if using HTTPS
+    httpOnly: true,
+  },
+}));
+
 
 app.use(cors({
   origin: function (origin, callback) {
