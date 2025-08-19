@@ -8,6 +8,10 @@ import path from 'path';
 import apiRoutes from './routes/api.js';
 import trackRoutes from "./routes/tracks.js"
 import authRoutes from './routes/auth.js';
+import subgenreRoutes from './routes/subgenres.js';
+import instrumentRoutes from './routes/instruments.js';
+import userRoutes from './routes/users.js';
+import uploadRoutes from './routes/uploads.js';
 import { fileURLToPath } from 'url';
 
 mongoose.connect(process.env.MONGODB_URI)
@@ -41,6 +45,10 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api', apiRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/tracks", trackRoutes);
+app.use('/api/subgenres', subgenreRoutes);
+app.use('/api/instruments', instrumentRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/uploads', uploadRoutes);
 
 
 const PORT = process.env.PORT || 5000;
