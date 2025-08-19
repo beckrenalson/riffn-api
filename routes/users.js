@@ -5,12 +5,45 @@ import User from '../models/User.js';
 
 const router = express.Router();
 
-// Get all users
+// Get all users with populated band members and bands
 router.get('/', async (req, res) => {
     try {
-        const users = await User.find();
+        const users = await User.find()
+            .populate('bandMembers', 'userName')
+            .populate('bands', 'userName');
         res.json(users);
-    } catch {
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Get single user by ID with populated band members and bands
+router.get('/:id', async (req, res) => {
+    try {
+        const user = await User.findById(req.params.id)
+            .populate('bandMembers', 'userName')
+            .populate('bands', 'userName');
+
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        res.json(user);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Get user by username
+router.get('/username/:userName', async (req, res) => {
+    try {
+        const user = await User.findOne({ userName: req.params.userName })
+            .populate('bandMembers', 'userName')
+            .populate('bands', 'userName');
+
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        res.json(user);
+    } catch (err) {
+        console.error(err);
         res.status(500).json({ error: 'Server error' });
     }
 });
@@ -32,9 +65,7 @@ router.post('/',
     ],
     async (req, res) => {
         const errors = validationResult(req);
-        if (!errors.isEmpty()) {
-            return res.status(400).json({ errors: errors.array() });
-        }
+        if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
         try {
             const { password, profileImage } = req.body;
@@ -52,21 +83,20 @@ router.post('/',
             console.error('Error saving user:', error);
             res.status(500).json({ error: 'Server error' });
         }
-    });
+    }
+);
 
 // Update user
 router.patch('/:id', async (req, res) => {
     try {
         const updateData = { ...req.body };
+        if (updateData.password) updateData.password = await bcrypt.hash(updateData.password, 10);
 
-        if (updateData.password) {
-            updateData.password = await bcrypt.hash(updateData.password, 10);
-        }
-
-        const updated = await User.findByIdAndUpdate(req.params.id, updateData, { new: true });
+        const updated = await User.findByIdAndUpdate(req.params.id, updateData, { new: true })
+            .populate('bandMembers', 'userName')
+            .populate('bands', 'userName');
 
         if (!updated) return res.status(404).json({ error: 'User not found' });
-
         res.json(updated);
     } catch (error) {
         console.error('Error updating user:', error);
@@ -95,39 +125,28 @@ router.post("/check-details",
     ],
     async (req, res) => {
         const errors = validationResult(req);
-
-        if (!errors.isEmpty()) {
-            return res.status(400).json({ errors: errors.array() });
-        }
+        if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
         const { email } = req.body;
 
         try {
             const user = await User.findOne({ email });
-
-            if (user) {
-                return res.status(409).json({
-                    errors: [{ param: "email", msg: "Email already in use" }],
-                });
-            }
-
+            if (user) return res.status(409).json({
+                errors: [{ param: "email", msg: "Email already in use" }],
+            });
             return res.status(200).json({ available: true });
         } catch (err) {
             console.error("Error checking email:", err);
             return res.status(500).json({ error: "Server error" });
         }
-    });
+    }
+);
 
 // Delete user
 router.delete('/:id', async (req, res) => {
     try {
         const deletedUser = await User.findByIdAndDelete(req.params.id);
-
-        if (!deletedUser) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-
-        // Optionally, delete related resources here
+        if (!deletedUser) return res.status(404).json({ error: 'User not found' });
 
         res.json({ message: 'User account deleted successfully' });
     } catch (error) {

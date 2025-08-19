@@ -12,6 +12,7 @@ import subgenreRoutes from './routes/subgenres.js';
 import instrumentRoutes from './routes/instruments.js';
 import userRoutes from './routes/users.js';
 import uploadRoutes from './routes/uploads.js';
+import connectionRoutes from './routes/connections.js';
 import { fileURLToPath } from 'url';
 
 mongoose.connect(process.env.MONGODB_URI)
@@ -49,6 +50,7 @@ app.use('/api/subgenres', subgenreRoutes);
 app.use('/api/instruments', instrumentRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/uploads', uploadRoutes);
+app.use('/api/connections', connectionRoutes);
 
 
 const PORT = process.env.PORT || 5000;
