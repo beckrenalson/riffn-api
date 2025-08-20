@@ -5,7 +5,6 @@ import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import path from 'path';
-import apiRoutes from './routes/api.js';
 import trackRoutes from "./routes/tracks.js"
 import authRoutes from './routes/auth.js';
 import subgenreRoutes from './routes/subgenres.js';
@@ -43,7 +42,6 @@ app.use(cors({
 
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-app.use('/api', apiRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/tracks", trackRoutes);
 app.use('/api/subgenres', subgenreRoutes);

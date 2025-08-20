@@ -5,152 +5,200 @@ import User from '../models/User.js';
 
 const router = express.Router();
 
-// Get all users with populated band members and bands
+const populateOptions = [
+    { path: 'bandMembers', select: 'userName firstName lastName profileImage' },
+    { path: 'bands', select: 'userName profileImage' },
+];
+
+const cleanUser = (user) => {
+    if (!user) return null;
+    const obj = user.toObject();
+    obj.bandMembers = (obj.bandMembers || []).filter(Boolean);
+    obj.bands = (obj.bands || []).filter(Boolean);
+    return obj;
+};
+
+// --------------------------------------------
+// Get all users (with optional search)
+// --------------------------------------------
 router.get('/', async (req, res) => {
     try {
-        const users = await User.find()
-            .populate('bandMembers', 'userName')
-            .populate('bands', 'userName');
-        res.json(users);
+        const search = req.query.search || '';
+        let query = {};
+        if (search) {
+            query.userName = { $regex: search, $options: 'i' };
+        }
+
+        const users = await User.find(query)
+            .populate(populateOptions)
+            .select('-password');
+
+        res.json(users.map(cleanUser));
     } catch (err) {
-        console.error(err);
+        console.error('Error fetching users:', err);
         res.status(500).json({ error: 'Server error' });
     }
 });
 
-// Get single user by ID with populated band members and bands
-router.get('/:id', async (req, res) => {
-    try {
-        const user = await User.findById(req.params.id)
-            .populate('bandMembers', 'userName')
-            .populate('bands', 'userName');
-
-        if (!user) return res.status(404).json({ error: 'User not found' });
-        res.json(user);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Server error' });
-    }
-});
-
-// Get user by username
+// --------------------------------------------
+// Get user by username (must come before :id)
+// --------------------------------------------
 router.get('/username/:userName', async (req, res) => {
     try {
         const user = await User.findOne({ userName: req.params.userName })
-            .populate('bandMembers', 'userName')
-            .populate('bands', 'userName');
+            .populate(populateOptions)
+            .select('-password');
 
         if (!user) return res.status(404).json({ error: 'User not found' });
-        res.json(user);
+        res.json(cleanUser(user));
     } catch (err) {
-        console.error(err);
+        console.error('Error fetching user by username:', err);
         res.status(500).json({ error: 'Server error' });
     }
 });
 
-// Create new user
-router.post('/',
+// --------------------------------------------
+// Get single user by ID
+// --------------------------------------------
+router.get('/:id', async (req, res) => {
+    try {
+        const user = await User.findById(req.params.id)
+            .populate(populateOptions)
+            .select('-password');
+
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        res.json(cleanUser(user));
+    } catch (err) {
+        console.error('Error fetching user:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// --------------------------------------------
+// Create user
+// --------------------------------------------
+router.post(
+    '/',
     [
-        body('email')
-            .isEmail().withMessage('Invalid email address')
-            .normalizeEmail(),
-        body('password')
-            .isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
-        body('userName')
-            .trim().notEmpty().withMessage('Username is required'),
-        body('selectedGenres')
-            .isArray({ min: 1 }).withMessage('At least one genre must be selected'),
-        body('selectedInstruments')
-            .isArray({ min: 1 }).withMessage('At least one instrument must be selected'),
+        body('userName').notEmpty().withMessage('Username required'),
+        body('email').isEmail().withMessage('Valid email required'),
+        body('password').isLength({ min: 6 }).withMessage('Password min 6 chars'),
     ],
     async (req, res) => {
         const errors = validationResult(req);
-        if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+        if (!errors.isEmpty())
+            return res.status(400).json({ errors: errors.array() });
 
         try {
-            const { password, profileImage } = req.body;
+            const { userName, email, password, ...rest } = req.body;
+
+            const existing = await User.findOne({ $or: [{ email }, { userName }] });
+            if (existing)
+                return res.status(400).json({ error: 'Email or username already taken' });
+
             const hashedPassword = await bcrypt.hash(password, 10);
 
             const user = new User({
-                ...req.body,
+                userName,
+                email,
                 password: hashedPassword,
-                profileImage: profileImage || null,
+                ...rest,
             });
 
-            await user.save();
-            res.status(201).json(user);
-        } catch (error) {
-            console.error('Error saving user:', error);
+            const savedUser = await user.save();
+            await savedUser.populate(populateOptions);
+
+            res.status(201).json(cleanUser(savedUser));
+        } catch (err) {
+            console.error('Error creating user:', err);
             res.status(500).json({ error: 'Server error' });
         }
     }
 );
 
-// Update user
+// --------------------------------------------
+// Update user (PATCH)
+// --------------------------------------------
 router.patch('/:id', async (req, res) => {
     try {
-        const updateData = { ...req.body };
-        if (updateData.password) updateData.password = await bcrypt.hash(updateData.password, 10);
+        const allowed = [
+            'userName',
+            'firstName',
+            'lastName',
+            'email',
+            'profileImage',
+            'bandMembers',
+            'bands',
+        ];
+        const updateData = {};
+        for (const key of allowed) {
+            if (req.body[key] !== undefined) updateData[key] = req.body[key];
+        }
 
-        const updated = await User.findByIdAndUpdate(req.params.id, updateData, { new: true })
-            .populate('bandMembers', 'userName')
-            .populate('bands', 'userName');
+        const updated = await User.findByIdAndUpdate(req.params.id, updateData, {
+            new: true,
+        })
+            .populate(populateOptions)
+            .select('-password');
 
         if (!updated) return res.status(404).json({ error: 'User not found' });
-        res.json(updated);
-    } catch (error) {
-        console.error('Error updating user:', error);
+        res.json(cleanUser(updated));
+    } catch (err) {
+        console.error('Error updating user:', err);
         res.status(500).json({ error: 'Server error' });
     }
 });
 
-// Check user details availability
-router.post("/check-details",
-    [
-        body("email")
-            .isEmail()
-            .withMessage("Invalid email address")
-            .normalizeEmail(),
-        body("firstName")
-            .trim()
-            .notEmpty()
-            .withMessage("First name is required"),
-        body("lastName")
-            .trim()
-            .notEmpty()
-            .withMessage("Last name is required"),
-        body("password")
-            .isLength({ min: 8 })
-            .withMessage("Password must be at least 8 characters long"),
-    ],
-    async (req, res) => {
-        const errors = validationResult(req);
-        if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
-
-        const { email } = req.body;
-
-        try {
-            const user = await User.findOne({ email });
-            if (user) return res.status(409).json({
-                errors: [{ param: "email", msg: "Email already in use" }],
-            });
-            return res.status(200).json({ available: true });
-        } catch (err) {
-            console.error("Error checking email:", err);
-            return res.status(500).json({ error: "Server error" });
-        }
-    }
-);
-
+// --------------------------------------------
 // Delete user
+// --------------------------------------------
 router.delete('/:id', async (req, res) => {
     try {
-        const deletedUser = await User.findByIdAndDelete(req.params.id);
-        if (!deletedUser) return res.status(404).json({ error: 'User not found' });
+        const deleted = await User.findByIdAndDelete(req.params.id);
+        if (!deleted) return res.status(404).json({ error: 'User not found' });
+        res.json({ message: 'User deleted' });
+    } catch (err) {
+        console.error('Error deleting user:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
 
-        res.json({ message: 'User account deleted successfully' });
-    } catch (error) {
-        console.error('Error deleting user:', error);
+// --------------------------------------------
+// Band member management
+// --------------------------------------------
+router.post('/:id/bandMembers', async (req, res) => {
+    try {
+        const { memberId } = req.body;
+        const updated = await User.findByIdAndUpdate(
+            req.params.id,
+            { $addToSet: { bandMembers: memberId } },
+            { new: true }
+        )
+            .populate(populateOptions)
+            .select('-password');
+
+        if (!updated) return res.status(404).json({ error: 'User not found' });
+        res.json(cleanUser(updated));
+    } catch (err) {
+        console.error('Error adding band member:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+router.delete('/:id/bandMembers/:memberId', async (req, res) => {
+    try {
+        const updated = await User.findByIdAndUpdate(
+            req.params.id,
+            { $pull: { bandMembers: req.params.memberId } },
+            { new: true }
+        )
+            .populate(populateOptions)
+            .select('-password');
+
+        if (!updated) return res.status(404).json({ error: 'User not found' });
+        res.json(cleanUser(updated));
+    } catch (err) {
+        console.error('Error removing band member:', err);
         res.status(500).json({ error: 'Server error' });
     }
 });
