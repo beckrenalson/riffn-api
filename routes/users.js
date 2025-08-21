@@ -136,7 +136,19 @@ router.post(
 router.patch(
     "/:id",
     asyncHandler(async (req, res) => {
-        const allowed = ["firstName", "lastName", "profileImage", "bandMembers", "bands"];
+        const allowed = [
+            "firstName",
+            "lastName",
+            "profileImage",
+            "bandMembers",
+            "bands",
+            "selectedInstruments",
+            "selectedGenres",
+            "email",
+            "location",
+            "bio",
+            "musicEmbedUrl",
+        ];
         const updateData = {};
         for (const key of allowed) {
             if (req.body[key] !== undefined) updateData[key] = req.body[key];
