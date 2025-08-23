@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema({
     profileImage: String,
@@ -6,14 +6,19 @@ const userSchema = new mongoose.Schema({
     firstName: String,
     lastName: String,
     email: { type: String, required: true, unique: true, match: /\S+@\S+\.\S+/ },
-    password: { type: String, require: true, minlength: 8 },
+    password: { type: String, required: true, minlength: 8 },
     profileType: String,
     selectedInstruments: Array,
     selectedGenres: Array,
     location: String,
-    bandMembers: { type: [mongoose.Schema.Types.ObjectId], ref: 'User', default: [] },
-    bands: { type: [mongoose.Schema.Types.ObjectId], ref: 'User', default: [] },
-    bio: String
+    bandMembers: { type: [mongoose.Schema.Types.ObjectId], ref: "User", default: [] },
+    bands: { type: [mongoose.Schema.Types.ObjectId], ref: "User", default: [] },
+    bio: String,
+
+    // --- PASSKEY FIELDS ---
+    passkeyId: { type: String, default: null },
+    publicKey: { type: String, default: null },
+    lastPasskeyUsed: { type: Date, default: null },
 });
 
-export default mongoose.model('User', userSchema);
+export default mongoose.model("User", userSchema);

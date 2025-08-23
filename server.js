@@ -13,6 +13,7 @@ import userRoutes from './routes/users.js';
 import uploadRoutes from './routes/uploads.js';
 import connectionRoutes from './routes/connections.js';
 import { fileURLToPath } from 'url';
+import passkeyRoutes from './routes/passkeys.js'
 
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('MongoDB connected'))
@@ -49,6 +50,7 @@ app.use('/api/instruments', instrumentRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/uploads', uploadRoutes);
 app.use('/api/connections', connectionRoutes);
+app.use('/api/passkeys', passkeyRoutes);
 
 
 const PORT = process.env.PORT || 5000;
