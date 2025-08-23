@@ -66,8 +66,6 @@ router.post("/users/:userId/passkeys", async (req, res) => {
     const { userId } = req.params;
     const { attestationResponse } = req.body;
 
-    console.log("Verifying passkey for userId:", userId);
-
     try {
         const user = await User.findById(userId);
         if (!user) return res.status(404).json({ error: "User not found" });
@@ -77,22 +75,24 @@ router.post("/users/:userId/passkeys", async (req, res) => {
             return res.status(400).json({ error: "No challenge found for this user" });
         }
 
-        console.log("Expected challenge exists:", !!expectedChallenge);
-
         const verification = await verifyRegistrationResponse({
             response: attestationResponse,
             expectedChallenge,
-            expectedOrigin: ["http://localhost:3000", "http://localhost:5173"], // Add your frontend URLs
+            expectedOrigin: ["http://localhost:3000", "http://localhost:5173"],
             expectedRPID: "localhost", // Should match rpID from registration
         });
-
-        console.log("Verification result:", verification.verified);
 
         if (!verification.verified) {
             return res.status(400).json({ error: "Passkey registration failed" });
         }
 
-        const { credentialPublicKey, credentialID, counter } = verification.registrationInfo;
+        // In v13, the credential data is nested under registrationInfo.credential
+        const credential = verification.registrationInfo?.credential;
+        if (!credential) {
+            throw new Error("No credential found in verification result");
+        }
+
+        const { id: credentialID, publicKey: credentialPublicKey, counter } = credential;
 
         // Save the passkey data
         user.passkeyId = base64url.encode(credentialID);
@@ -102,8 +102,6 @@ router.post("/users/:userId/passkeys", async (req, res) => {
 
         // Clean up the challenge
         challengeStore.delete(userId);
-
-        console.log("Passkey registered successfully");
 
         res.json({ success: true });
     } catch (err) {
