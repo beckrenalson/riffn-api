@@ -62,7 +62,7 @@ router.post("/passkey-challenge-temp", async (req, res) => {
 
         const options = await generateRegistrationOptions({
             rpName: "Riffn",
-            rpID: "localhost", // replace with your domain in production
+            rpID: expectedRPID, // replace with your domain in production
             userID: userIdBuffer,
             userName: userName || email,
             userDisplayName: `${firstName} ${lastName}`,
@@ -210,7 +210,7 @@ router.post("/users/passkey-login-challenge", async (req, res) => {
                 },
             ],
             userVerification: "preferred",
-            rpID: "localhost",
+            rpID: expectedRPID,
         });
 
         challengeStore.set(user._id.toString(), {
