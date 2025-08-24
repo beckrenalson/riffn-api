@@ -13,6 +13,9 @@ import {
 
 const router = express.Router();
 
+const expectedOrigin = [process.env.PASSKEY_ORIGIN];
+const expectedRPID = process.env.PASSKEY_RPID;
+
 // In-memory challenge store for demo (use DB/session in production)
 import challengeStore from "../utils/challengeStore.js";
 
@@ -149,8 +152,8 @@ router.post("/users/:userId/passkeys", async (req, res) => {
         const verification = await verifyRegistrationResponse({
             response: attestationResponse,
             expectedChallenge: expectedChallenge.challenge || expectedChallenge,
-            expectedOrigin: ["http://localhost:3000", "http://localhost:5173"],
-            expectedRPID: "localhost", // Should match rpID from registration
+            expectedOrigin,
+            expectedRPID,
         });
 
         if (!verification.verified) {
@@ -248,8 +251,8 @@ router.post("/users/passkey-login", async (req, res) => {
         const verification = await verifyAuthenticationResponse({
             response: assertionResponse,
             expectedChallenge: challengeData.challenge,
-            expectedOrigin: ["http://localhost:3000", "http://localhost:5173"],
-            expectedRPID: "localhost",
+            expectedOrigin,
+            expectedRPID,
             authenticator: {
                 credentialID: base64url.toBuffer(user.passkeyId),
                 credentialPublicKey: base64url.toBuffer(user.publicKey),

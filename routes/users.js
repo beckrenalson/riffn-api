@@ -10,6 +10,9 @@ import challengeStore from "../utils/challengeStore.js";
 
 const router = express.Router();
 
+const expectedOrigin = [process.env.PASSKEY_ORIGIN];
+const expectedRPID = process.env.PASSKEY_RPID;
+
 // --- Cleanup expired challenges every minute ---
 const cleanupExpiredChallenges = () => {
     const now = Date.now();
@@ -148,8 +151,8 @@ router.post(
                     const verification = await verifyRegistrationResponse({
                         response: passkeyData.credential,
                         expectedChallenge: challengeData.challenge,
-                        expectedOrigin: ["http://localhost:3000", "http://localhost:5173"],
-                        expectedRPID: "localhost",
+                        expectedOrigin,
+                        expectedRPID,
                     });
 
                     if (verification.verified && verification.registrationInfo?.credential) {
