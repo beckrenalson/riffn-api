@@ -18,6 +18,8 @@ const userSchema = new mongoose.Schema({
     // --- PASSKEY FIELDS ---
     passkeyId: { type: String, default: null },
     publicKey: { type: String, default: null },
+    // This is the new field you need to add 👇
+    passkeyCounter: { type: Number, default: 0 },
     lastPasskeyUsed: { type: Date, default: null },
 });
 

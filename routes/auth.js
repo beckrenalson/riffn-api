@@ -200,6 +200,13 @@ router.post("/users/:userId/passkeys", async (req, res) => {
 
         console.log("✅ Found challenge with key:", challengeKey);
 
+        // Add this before the passkey verification section
+        if (typeof user.passkeyCounter !== 'number') {
+            console.log('Fixing undefined passkeyCounter for user:', user.email);
+            user.passkeyCounter = 0;
+            await user.save();
+        }
+
         const verification = await verifyRegistrationResponse({
             response: attestationResponse,
             expectedChallenge: expectedChallenge.challenge || expectedChallenge,
@@ -275,24 +282,68 @@ router.post('/users/passkey-login-challenge', async (req, res) => {
             return res.json({ user: safeUser, message: 'Password login successful' });
         }
 
+        // Replace the PASSKEY LOGIN - Step A section with this fixed version:
+
         // -----------------
         // PASSKEY LOGIN - Step A: initiate challenge
         // -----------------
         if (requestPasskey && !passkeyCredential) {
             console.log('Processing passkey challenge request');
-            if (!user.passkeyId) {
-                console.log('User has no passkey ID stored');
-                return res.status(404).json({ message: 'User has no passkey' });
+
+            if (!user.passkeyId || !user.publicKey) {
+                console.log('User has no passkey credentials stored. Cannot initiate passkey login.');
+                return res.status(404).json({ message: 'User has not registered a passkey' });
             }
 
-            const challenge = randomBytes(32).toString('base64url');
-            const tempUserId = Buffer.from(email).toString('base64url');
+            // Create Buffers from the stored strings.
+            let credentialIDBuffer;
+            let credentialPublicKeyBuffer;
 
-            challengeStore.set(tempUserId, { challenge, userId: user._id, timestamp: Date.now() });
+            try {
+                credentialIDBuffer = base64url.toBuffer(user.passkeyId);
+                credentialPublicKeyBuffer = base64url.toBuffer(user.publicKey);
+            } catch (bufferError) {
+                console.error('Buffer conversion error:', bufferError);
+                return res.status(500).json({ message: 'Passkey data is malformed' });
+            }
+
+            // Check if the conversion resulted in an undefined or empty Buffer.
+            if (!credentialIDBuffer || credentialIDBuffer.length === 0 || !credentialPublicKeyBuffer || credentialPublicKeyBuffer.length === 0) {
+                console.error('Buffer conversion resulted in empty or invalid data.');
+                return res.status(500).json({ message: 'Passkey data is malformed after conversion.' });
+            }
+
+            // FIX: Create proper credential descriptor for allowCredentials
+            // Use the original base64url string, not the Buffer
+            const allowCredentials = [{
+                id: user.passkeyId, // Use the stored base64url string directly
+                type: 'public-key',
+                transports: ['internal', 'hybrid'] // Add common transports
+            }];
+
+            const options = await generateAuthenticationOptions({
+                rpID: expectedRPID,
+                allowCredentials: allowCredentials, // Use proper credential descriptors
+                userVerification: "preferred",
+            });
+
+            const tempUserId = generateTempUserId(email);
+
+            // Store both challenge and authenticator data for verification step
+            challengeStore.set(tempUserId, {
+                challenge: options.challenge,
+                userId: user._id,
+                timestamp: Date.now(),
+                authenticator: {
+                    credentialID: credentialIDBuffer,
+                    credentialPublicKey: credentialPublicKeyBuffer,
+                    counter: user.passkeyCounter || 0, // Ensure counter is always a number
+                }
+            });
 
             const { password: _, ...safeUser } = user.toObject();
             console.log('Sending challenge response, tempUserId:', tempUserId);
-            return res.json({ tempUserId, challenge, userName: user.userName, user: safeUser });
+            return res.json({ tempUserId, challenge: options.challenge, userName: user.userName, user: safeUser });
         }
 
         // -----------------
@@ -305,6 +356,13 @@ router.post('/users/passkey-login-challenge', async (req, res) => {
             const challengeData = challengeStore.get(tempUserId);
             if (!challengeData) return res.status(400).json({ message: 'Challenge missing or expired' });
 
+            // Ensure passkeyCounter is a number (safety check for existing users)
+            if (typeof user.passkeyCounter !== 'number') {
+                console.log('⚠️  Fixing undefined passkeyCounter for user:', user.email);
+                user.passkeyCounter = 0;
+                await user.save();
+            }
+
             // Add debugging logs
             console.log('=== PASSKEY VERIFICATION DEBUG ===');
             console.log('- User has passkeyId:', !!user.passkeyId);
@@ -314,99 +372,97 @@ router.post('/users/passkey-login-challenge', async (req, res) => {
             console.log('- Expected RPID:', expectedRPID);
             console.log('- Received credential structure:', Object.keys(passkeyCredential));
 
-            // Handle different possible formats of stored credentials
-            let credentialID, publicKey;
+            // Debug challenge data
+            console.log('=== CHALLENGE DATA DEBUG ===');
+            console.log('- challengeData keys:', Object.keys(challengeData));
+            console.log('- challengeData.credential exists:', !!challengeData.credential);
+            console.log('- challengeData.authenticator exists (legacy):', !!challengeData.authenticator);
 
-            // Check if passkeyId is stored as base64url or base64
-            try {
-                if (user.passkeyId.includes('-') || user.passkeyId.includes('_')) {
-                    // It's base64url, convert to base64 first
-                    credentialID = Buffer.from(base64urlToBase64(user.passkeyId), 'base64');
-                } else {
-                    // It's regular base64
-                    credentialID = Buffer.from(user.passkeyId, 'base64');
+            // Create credential object for v13 API
+            let credential;
+
+            if (challengeData.credential) {
+                console.log('Using stored credential from challenge (v13 format)');
+                credential = challengeData.credential;
+            } else if (challengeData.authenticator) {
+                console.log('Converting legacy authenticator to v13 credential format');
+                // Convert legacy format to v13 format
+                credential = {
+                    id: user.passkeyId,
+                    publicKey: challengeData.authenticator.credentialPublicKey,
+                    counter: challengeData.authenticator.counter,
+                    transports: ['internal', 'hybrid']
+                };
+            } else {
+                console.log('Creating fallback credential from user data');
+                try {
+                    credential = {
+                        id: user.passkeyId,
+                        publicKey: base64url.toBuffer(user.publicKey),
+                        counter: user.passkeyCounter || 0,
+                        transports: ['internal', 'hybrid']
+                    };
+                } catch (bufferError) {
+                    console.error('Buffer conversion error:', bufferError);
+                    return res.status(500).json({ message: 'Failed to process passkey data' });
                 }
-            } catch (err) {
-                console.error('Error parsing credentialID:', err);
-                return res.status(400).json({ message: 'Invalid stored credential ID' });
             }
 
-            // Handle publicKey similarly
-            try {
-                if (user.publicKey.includes('-') || user.publicKey.includes('_')) {
-                    // It's base64url
-                    publicKey = Buffer.from(base64urlToBase64(user.publicKey), 'base64');
-                } else {
-                    // It's regular base64
-                    publicKey = Buffer.from(user.publicKey, 'base64');
-                }
-            } catch (err) {
-                console.error('Error parsing publicKey:', err);
-                return res.status(400).json({ message: 'Invalid stored public key' });
-            }
-
-            // Ensure counter is a number
-            const currentCounter = typeof user.passkeyCounter === 'number' ? user.passkeyCounter : 0;
-            console.log('Using counter:', currentCounter);
+            // Debug the credential object
+            console.log('=== CREDENTIAL DEBUG ===');
+            console.log('- Credential id:', credential.id);
+            console.log('- Credential counter:', credential.counter);
+            console.log('- Counter type:', typeof credential.counter);
+            console.log('- User passkeyCounter:', user.passkeyCounter);
+            console.log('- PublicKey buffer length:', credential.publicKey ? credential.publicKey.length : 'undefined');
+            console.log('- Transports:', credential.transports);
 
             let verification;
             try {
+                console.log('=== CALLING VERIFICATION ===');
+                console.log('- About to call verifyAuthenticationResponse with v13 API');
+
+                // v13 API: use 'credential' parameter
                 verification = await verifyAuthenticationResponse({
                     response: passkeyCredential,
                     expectedChallenge: challengeData.challenge,
                     expectedOrigin,
                     expectedRPID,
-                    authenticator: {
-                        credentialID,
-                        counter: currentCounter,
-                        credentialPublicKey: publicKey,
-                    },
+                    credential: credential, // v13 API uses 'credential' instead of 'authenticator'
                 });
-                console.log('Verification succeeded with credentialPublicKey!');
+
+                console.log('✅ Verification succeeded!');
             } catch (verificationError) {
-                console.log('credentialPublicKey failed:', verificationError.message);
-                console.log('Trying with publicKey field name...');
+                console.error('❌ Passkey verification failed:', verificationError.message);
+                console.error('❌ Full error:', verificationError);
 
-                try {
-                    verification = await verifyAuthenticationResponse({
-                        response: passkeyCredential,
-                        expectedChallenge: challengeData.challenge,
-                        expectedOrigin,
-                        expectedRPID,
-                        authenticator: {
-                            credentialID,
-                            counter: currentCounter,
-                            publicKey,
-                        },
-                    });
-                    console.log('Verification succeeded with publicKey!');
-                } catch (secondError) {
-                    console.error('Both verification attempts failed');
-                    console.error('credentialPublicKey error:', verificationError.message);
-                    console.error('publicKey error:', secondError.message);
-                    console.error('Full error stack:', secondError.stack);
-                    return res.status(400).json({ message: 'Passkey verification failed', error: secondError.message });
-                }
-            }
+                // Debug the inputs to verification
+                console.error('=== VERIFICATION INPUT DEBUG ===');
+                console.error('- passkeyCredential structure:', {
+                    id: !!passkeyCredential.id,
+                    rawId: !!passkeyCredential.rawId,
+                    response: !!passkeyCredential.response,
+                    type: passkeyCredential.type
+                });
+                console.error('- Challenge exists:', !!challengeData.challenge);
+                console.error('- Credential structure:', {
+                    id: !!credential.id,
+                    publicKey: !!credential.publicKey,
+                    counter: credential.counter,
+                    counterType: typeof credential.counter,
+                    transports: credential.transports
+                });
 
-            console.log('Verification result:', verification);
-            console.log('Verification verified:', verification.verified);
-            console.log('Verification authenticationInfo:', verification.authenticationInfo);
-
-            if (!verification.verified) {
-                console.error('Passkey verification failed');
-                return res.status(401).json({ message: 'Passkey authentication failed' });
+                return res.status(400).json({ message: 'Passkey verification failed', error: verificationError.message });
             }
 
             // Update counter - handle different possible structures
-            if (verification.authenticationInfo && typeof verification.authenticationInfo.newCounter !== 'undefined') {
-                user.passkeyCounter = verification.authenticationInfo.newCounter;
-                console.log('Updated counter to:', verification.authenticationInfo.newCounter);
-            } else if (verification.authenticationInfo && typeof verification.authenticationInfo.counter !== 'undefined') {
-                user.passkeyCounter = verification.authenticationInfo.counter;
-                console.log('Updated counter to (alt structure):', verification.authenticationInfo.counter);
+            const { newCounter } = verification.authenticationInfo;
+            if (typeof newCounter !== 'undefined') {
+                user.passkeyCounter = newCounter;
+                console.log('Updated counter to:', newCounter);
             } else {
-                console.log('No counter found in verification result, keeping existing counter:', user.passkeyCounter);
+                console.log('No new counter found in verification result, keeping existing counter:', user.passkeyCounter);
             }
             await user.save();
 
@@ -426,59 +482,6 @@ router.post('/users/passkey-login-challenge', async (req, res) => {
         console.error('Login error:', err);
         console.error('Error stack:', err.stack);
         res.status(500).json({ message: 'Server error', error: err.message });
-    }
-});
-
-// -----------------------------
-// LEGACY PASSKEY LOGIN (kept for backward compatibility)
-// -----------------------------
-router.post("/users/passkey-login", async (req, res) => {
-    try {
-        const { userId, assertionResponse } = req.body;
-        console.log("🔍 Login verification for userId:", userId);
-
-        const user = await User.findById(userId);
-        if (!user || !user.passkeyId) {
-            return res.status(404).json({ error: "User or passkey not found" });
-        }
-
-        const challengeData = challengeStore.get(userId);
-        if (!challengeData) {
-            return res.status(400).json({ error: "No challenge found for login" });
-        }
-
-        const verification = await verifyAuthenticationResponse({
-            response: assertionResponse,
-            expectedChallenge: challengeData.challenge,
-            expectedOrigin,
-            expectedRPID,
-            authenticator: {
-                credentialID: base64url.toBuffer(user.passkeyId),
-                credentialPublicKey: base64url.toBuffer(user.publicKey),
-                counter: user.passkeyCounter || 0,
-            },
-        });
-
-        if (!verification.verified) {
-            return res.status(401).json({ error: "Passkey login failed" });
-        }
-
-        // Update counter
-        user.passkeyCounter = verification.authenticationInfo.newCounter;
-        user.lastPasskeyUsed = new Date();
-        await user.save();
-
-        challengeStore.delete(userId);
-
-        console.log("✅ Passkey login successful");
-
-        res.json({ user });
-    } catch (err) {
-        console.error("❌ Login verification error:", err);
-        res.status(500).json({
-            error: "Passkey login verification failed",
-            details: err.message
-        });
     }
 });
 
