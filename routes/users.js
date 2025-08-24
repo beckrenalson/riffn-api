@@ -1,5 +1,5 @@
 // ===== REFACTORED users.js =====
-
+import dotenv from 'dotenv'
 import express from "express";
 import bcrypt from "bcrypt";
 import { body, validationResult } from "express-validator";
@@ -7,6 +7,8 @@ import User from "../models/User.js";
 import { verifyRegistrationResponse } from "@simplewebauthn/server";
 import { isoBase64URL } from "@simplewebauthn/server/helpers";
 import challengeStore from "../utils/challengeStore.js";
+
+dotenv.config()
 
 const router = express.Router();
 
