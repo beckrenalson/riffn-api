@@ -1,15 +1,36 @@
+// ===== REFACTORED users.js =====
+
 import express from "express";
 import bcrypt from "bcrypt";
 import { body, validationResult } from "express-validator";
 import User from "../models/User.js";
+import { verifyRegistrationResponse } from "@simplewebauthn/server";
+import { isoBase64URL } from "@simplewebauthn/server/helpers";
+import challengeStore from "../utils/challengeStore.js";
 
 const router = express.Router();
 
+// --- Cleanup expired challenges every minute ---
+const cleanupExpiredChallenges = () => {
+    const now = Date.now();
+    const maxAge = 5 * 60 * 1000; // 5 minutes
+
+    for (const [key, value] of challengeStore.entries()) {
+        if (value.timestamp && now - value.timestamp > maxAge) {
+            console.log("🧹 Cleaning up expired challenge:", key);
+            challengeStore.delete(key);
+        }
+    }
+};
+setInterval(cleanupExpiredChallenges, 60000);
+
+// --- Populate options for users ---
 const populateOptions = [
     { path: "bandMembers", select: "userName firstName lastName profileImage" },
     { path: "bands", select: "userName profileImage" },
 ];
 
+// --- Helpers ---
 const cleanUser = (user) => {
     if (!user) return null;
     const obj = user.toObject();
@@ -18,12 +39,9 @@ const cleanUser = (user) => {
     return obj;
 };
 
-// --- Middleware helpers ---
 const handleValidation = (req, res, next) => {
     const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-    }
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
     next();
 };
 
@@ -32,189 +50,190 @@ const asyncHandler = (fn) => (req, res, next) =>
 
 // --- Validation rules ---
 const userValidation = [
-    body("userName").notEmpty().withMessage("Username required"),
+    body("firstName").trim().notEmpty().withMessage("First name required"),
+    body("lastName").trim().notEmpty().withMessage("Last name required"),
     body("email").isEmail().withMessage("Valid email required").normalizeEmail(),
-    body("password")
-        .isLength({ min: 8 })
-        .withMessage("Password must be at least 8 characters long"),
+    body("password").isLength({ min: 8 }).withMessage("Password must be at least 8 characters long"),
 ];
 
 // --- Routes ---
 
-// Get all users (with optional search)
+// GET all users with optional search
 router.get(
     "/",
     asyncHandler(async (req, res) => {
         const search = req.query.search || "";
         const query = search ? { userName: { $regex: search, $options: "i" } } : {};
-
-        const users = await User.find(query)
-            .populate(populateOptions)
-            .select("-password");
-
+        const users = await User.find(query).populate(populateOptions).select("-password");
         res.json(users.map(cleanUser));
     })
 );
 
-// Check if email is available
+// POST check if email is available
 router.post(
     "/check-details",
     [
         body("email").isEmail().withMessage("Invalid email").normalizeEmail(),
         body("firstName").trim().notEmpty().withMessage("First name required"),
         body("lastName").trim().notEmpty().withMessage("Last name required"),
-        body("password")
-            .isLength({ min: 8 })
-            .withMessage("Password must be at least 8 characters long"),
+        body("password").isLength({ min: 8 }).withMessage("Password must be at least 8 characters long"),
     ],
     handleValidation,
     asyncHandler(async (req, res) => {
         const { email } = req.body;
         const user = await User.findOne({ email });
-        if (user) {
-            return res.status(409).json({
-                errors: [{ msg: "Email already in use", param: "email" }],
-            });
-        }
+        if (user) return res.status(409).json({ errors: [{ msg: "Email already in use", param: "email" }] });
         res.json({ available: true });
     })
 );
 
-// Get user by username
+// GET user by username
 router.get(
     "/username/:userName",
     asyncHandler(async (req, res) => {
-        const user = await User.findOne({ userName: req.params.userName })
-            .populate(populateOptions)
-            .select("-password");
+        const user = await User.findOne({ userName: req.params.userName }).populate(populateOptions).select("-password");
         if (!user) return res.status(404).json({ error: "User not found" });
         res.json(cleanUser(user));
     })
 );
 
-// Get single user by ID
+// GET user by ID
 router.get(
     "/:id",
     asyncHandler(async (req, res) => {
-        const user = await User.findById(req.params.id)
-            .populate(populateOptions)
-            .select("-password");
+        const user = await User.findById(req.params.id).populate(populateOptions).select("-password");
         if (!user) return res.status(404).json({ error: "User not found" });
         res.json(cleanUser(user));
     })
 );
 
-// Create user
+// POST create user with optional passkey
 router.post(
     "/",
     userValidation,
     handleValidation,
     asyncHandler(async (req, res) => {
-        const { userName, email, password, ...rest } = req.body;
+        const { firstName, lastName, email, password, userName, passkeyData, ...rest } = req.body;
 
-        const existing = await User.findOne({ $or: [{ email }, { userName }] });
-        if (existing)
-            return res.status(400).json({ error: "Email or username already taken" });
+        // Cleanup expired challenges
+        cleanupExpiredChallenges();
 
+        // Check if user already exists
+        const existingUser = await User.findOne({
+            $or: [
+                { email },
+                { userName: userName || `${firstName}${lastName}`.toLowerCase() },
+            ],
+        });
+        if (existingUser)
+            return res.status(409).json({ errors: [{ msg: "Email or username already in use" }] });
+
+        // Create new user
         const hashedPassword = await bcrypt.hash(password, 10);
-
         const user = new User({
-            userName,
+            firstName,
+            lastName,
             email,
             password: hashedPassword,
+            userName: userName || `${firstName}${lastName}`.toLowerCase(),
             ...rest,
         });
 
-        const savedUser = await user.save();
-        await savedUser.populate(populateOptions);
+        // --- Passkey registration ---
+        if (passkeyData?.tempUserId && passkeyData.credential) {
+            const challengeData = challengeStore.get(passkeyData.tempUserId);
 
-        res.status(201).json(cleanUser(savedUser));
+            if (challengeData) {
+                try {
+                    const verification = await verifyRegistrationResponse({
+                        response: passkeyData.credential,
+                        expectedChallenge: challengeData.challenge,
+                        expectedOrigin: ["http://localhost:3000", "http://localhost:5173"],
+                        expectedRPID: "localhost",
+                    });
+
+                    if (verification.verified && verification.registrationInfo?.credential) {
+                        const credential = verification.registrationInfo.credential;
+
+                        // Convert ArrayBuffers to Node Buffers before encoding
+                        user.passkeyId = isoBase64URL.fromBuffer(Buffer.from(credential.id));
+                        user.publicKey = isoBase64URL.fromBuffer(Buffer.from(credential.publicKey));
+                        user.passkeyCounter = credential.counter || 0;
+                        user.hasPasskey = true;
+
+                        console.log("✅ Passkey successfully registered:", user.passkeyId);
+                    } else {
+                        console.warn("❌ Passkey verification failed or no credential returned");
+                    }
+                } catch (err) {
+                    console.error("❌ Passkey registration error:", err);
+                }
+
+                // Remove challenge after processing
+                challengeStore.delete(passkeyData.tempUserId);
+            } else {
+                console.warn(`❌ No challenge found for tempUserId: ${passkeyData.tempUserId}`);
+            }
+        }
+
+        // Save user to DB
+        await user.save();
+        await user.populate(populateOptions);
+
+        const userResponse = cleanUser(user);
+        userResponse.hasPasskey = !!user.passkeyId;
+
+        res.status(201).json(userResponse);
     })
 );
 
-// Update user (restricted fields)
+
+// PATCH update user
 router.patch(
     "/:id",
     asyncHandler(async (req, res) => {
-        const allowed = [
-            "firstName",
-            "lastName",
-            "profileImage",
-            "bandMembers",
-            "bands",
-            "selectedInstruments",
-            "selectedGenres",
-            "email",
-            "location",
-            "bio",
-            "musicEmbedUrl",
-        ];
+        const allowed = ["firstName", "lastName", "profileImage", "bandMembers", "bands", "selectedInstruments", "selectedGenres", "email", "location", "bio", "musicEmbedUrl"];
         const updateData = {};
-        for (const key of allowed) {
-            if (req.body[key] !== undefined) updateData[key] = req.body[key];
-        }
+        for (const key of allowed) if (req.body[key] !== undefined) updateData[key] = req.body[key];
 
-        const updated = await User.findByIdAndUpdate(req.params.id, updateData, {
-            new: true,
-        })
-            .populate(populateOptions)
-            .select("-password");
-
+        const updated = await User.findByIdAndUpdate(req.params.id, updateData, { new: true }).populate(populateOptions).select("-password");
         if (!updated) return res.status(404).json({ error: "User not found" });
         res.json(cleanUser(updated));
     })
 );
 
-// Delete user
-router.delete(
-    "/:id",
-    asyncHandler(async (req, res) => {
-        const deleted = await User.findByIdAndDelete(req.params.id);
-        if (!deleted) return res.status(404).json({ error: "User not found" });
-        res.json({ message: "User deleted" });
-    })
-);
+// DELETE user
+router.delete("/:id", asyncHandler(async (req, res) => {
+    const deleted = await User.findByIdAndDelete(req.params.id);
+    if (!deleted) return res.status(404).json({ error: "User not found" });
+    res.json({ message: "User deleted" });
+}));
 
-// Band member management
-router.post(
-    "/:id/bandMembers",
-    asyncHandler(async (req, res) => {
-        const { memberId } = req.body;
+// ADD band member
+router.post("/:id/bandMembers", asyncHandler(async (req, res) => {
+    const { memberId } = req.body;
+    const member = await User.findById(memberId);
+    if (!member) return res.status(404).json({ error: "Member not found" });
 
-        // Ensure member exists
-        const member = await User.findById(memberId);
-        if (!member) return res.status(404).json({ error: "Member not found" });
+    const updated = await User.findByIdAndUpdate(req.params.id, { $addToSet: { bandMembers: memberId } }, { new: true })
+        .populate(populateOptions)
+        .select("-password");
 
-        const updated = await User.findByIdAndUpdate(
-            req.params.id,
-            { $addToSet: { bandMembers: memberId } },
-            { new: true }
-        )
-            .populate(populateOptions)
-            .select("-password");
+    if (!updated) return res.status(404).json({ error: "User not found" });
+    res.json(cleanUser(updated));
+}));
 
-        if (!updated) return res.status(404).json({ error: "User not found" });
-        res.json(cleanUser(updated));
-    })
-);
+// REMOVE band member
+router.delete("/:id/bandMembers/:memberId", asyncHandler(async (req, res) => {
+    const updated = await User.findByIdAndUpdate(req.params.id, { $pull: { bandMembers: req.params.memberId } }, { new: true })
+        .populate(populateOptions)
+        .select("-password");
 
-router.delete(
-    "/:id/bandMembers/:memberId",
-    asyncHandler(async (req, res) => {
-        const updated = await User.findByIdAndUpdate(
-            req.params.id,
-            { $pull: { bandMembers: req.params.memberId } },
-            { new: true }
-        )
-            .populate(populateOptions)
-            .select("-password");
+    if (!updated) return res.status(404).json({ error: "User not found" });
+    res.json(cleanUser(updated));
+}));
 
-        if (!updated) return res.status(404).json({ error: "User not found" });
-        res.json(cleanUser(updated));
-    })
-);
-
-// --- Central error handler ---
+// CENTRAL ERROR HANDLER
 router.use((err, req, res, next) => {
     console.error(err.stack || err);
     res.status(500).json({ error: "Server error" });
