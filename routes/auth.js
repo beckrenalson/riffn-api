@@ -10,7 +10,6 @@ import {
     generateAuthenticationOptions,
     verifyAuthenticationResponse,
 } from "@simplewebauthn/server";
-import { randomBytes } from 'crypto';
 
 dotenv.config();
 

@@ -64,6 +64,32 @@ router.get('/requests/:userId', async (req, res) => {
     }
 });
 
+// Get connection status between two users/user and band
+router.get('/status', async (req, res) => {
+    const { fromUserId, toBandId, toSoloId } = req.query;
+
+    try {
+        let connection;
+
+        if (toBandId) {
+            connection = await ConnectionRequest.findOne({ fromUser: fromUserId, toBand: toBandId });
+        } else if (toSoloId) {
+            connection = await ConnectionRequest.findOne({ fromUser: fromUserId, toSolo: toSoloId });
+        } else {
+            return res.status(400).json({ message: "No valid target specified" });
+        }
+
+        if (connection) {
+            res.json({ status: connection.status });
+        } else {
+            res.json({ status: 'none' });
+        }
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Server error" });
+    }
+});
+
 // Accept a request
 router.post('/:requestId/accept', async (req, res) => {
     try {
