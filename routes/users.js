@@ -4,6 +4,7 @@ import express from "express";
 import bcrypt from "bcrypt";
 import { body, validationResult } from "express-validator";
 import User from "../models/User.js";
+import ConnectionRequest from '../models/ConnectionRequest.js'; // Import ConnectionRequest model
 import { verifyRegistrationResponse } from "@simplewebauthn/server";
 import { isoBase64URL } from "@simplewebauthn/server/helpers";
 import challengeStore from "../utils/challengeStore.js";
@@ -235,6 +236,27 @@ router.delete("/:id/bandMembers/:memberId", asyncHandler(async (req, res) => {
         .select("-password");
 
     if (!updated) return res.status(404).json({ error: "User not found" });
+
+    console.log("Band ID:", req.params.id);
+    console.log("Member ID:", req.params.memberId);
+
+    const deleteQuery = {
+        $or: [
+            // Case 1: Member sent request to band
+            { fromUser: req.params.memberId, toBand: req.params.id },
+            // Case 2: Band sent request to solo member
+            { fromUser: req.params.id, toSolo: req.params.memberId },
+            // Case 3: Band sent request to another band (which is now the member)
+            { fromUser: req.params.id, toBand: req.params.memberId }
+        ]
+    };
+
+    console.log("Delete Query:", JSON.stringify(deleteQuery));
+
+    // Delete all connection requests involving both the band (req.params.id)
+    // and the removed member (req.params.memberId), regardless of status.
+    await ConnectionRequest.deleteMany(deleteQuery);
+
     res.json(cleanUser(updated));
 }));
 
