@@ -69,7 +69,18 @@ router.get(
     "/",
     asyncHandler(async (req, res) => {
         const search = req.query.search || "";
-        const query = search ? { userName: { $regex: search, $options: "i" } } : {};
+        const profileType = req.query.profileType || "";
+        const query = {};
+
+        if (search) {
+            query.userName = { $regex: search, $options: "i" };
+        }
+
+        // If profileType is provided and is 'solo', filter out 'Band' profiles case-insensitively.
+        if (profileType === "solo") {
+            query.profileType = { $not: { $regex: /^band$/i } }; // Case-insensitive check for 'band'
+        }
+
         const users = await User.find(query).populate(populateOptions).select("-password");
         res.json(users.map(cleanUser));
     })
