@@ -114,7 +114,6 @@ router.post('/login', async (req, res) => {
         });
 
         console.log('Password login successful for:', email);
-        console.log('Cookies set on password login:', req.cookies); // Debugging: log cookies
         return res.json({ user: safeUser, message: 'Password login successful' });
 
     } catch (err) {
@@ -519,7 +518,6 @@ router.post('/users/passkey-login-challenge', async (req, res) => {
                 maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
             });
 
-            console.log('Cookies set on passkey login:', req.cookies); // Debugging: log cookies
             return res.json({ user: safeUser, message: 'Passkey login successful' });
         }
 

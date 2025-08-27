@@ -7,7 +7,6 @@ dotenv.config();
 const protect = async (req, res, next) => {
     let token;
 
-    console.log('Auth middleware - incoming cookies:', req.cookies); // Debugging: log cookies
     if (req.cookies.jwt) {
         try {
             token = req.cookies.jwt;

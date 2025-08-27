@@ -1,11 +1,6 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-console.log('Server starting...');
-console.log('NODE_ENV:', process.env.NODE_ENV);
-console.log('JWT_SECRET loaded:', !!process.env.JWT_SECRET); // Only log if it exists, not the value itself for security
-console.log('JWT_REFRESH_SECRET loaded:', !!process.env.JWT_REFRESH_SECRET); // Only log if it exists
-
 import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
