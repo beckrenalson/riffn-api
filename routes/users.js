@@ -31,7 +31,7 @@ setInterval(cleanupExpiredChallenges, 60000);
 
 // --- Populate options for users ---
 const populateOptions = [
-    { path: "bandMembers", select: "userName firstName lastName profileImage" },
+    { path: "bandMembers", select: "userName firstName lastName profileImage selectedInstruments selectedGenres email phone socials bio location" },
     { path: "bands", select: "userName profileImage" },
 ];
 
