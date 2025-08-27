@@ -4,6 +4,7 @@ dotenv.config();
 import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import path from 'path';
 import trackRoutes from "./routes/tracks.js"
 import authRoutes from './routes/auth.js';
@@ -12,6 +13,7 @@ import instrumentRoutes from './routes/instruments.js';
 import userRoutes from './routes/users.js';
 import uploadRoutes from './routes/uploads.js';
 import connectionRoutes from './routes/connections.js';
+import { protect } from './middleware/authMiddleware.js';
 import { fileURLToPath } from 'url';
 
 mongoose.connect(process.env.MONGODB_URI)
@@ -41,14 +43,15 @@ app.use(cors({
 }));
 
 app.use(express.json());
+app.use(cookieParser());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use("/api/auth", authRoutes);
 app.use("/api/tracks", trackRoutes);
 app.use('/api/subgenres', subgenreRoutes);
 app.use('/api/instruments', instrumentRoutes);
-app.use('/api/users', userRoutes);
+app.use('/api/users', protect, userRoutes);
 app.use('/api/uploads', uploadRoutes);
-app.use('/api/connections', connectionRoutes);
+app.use('/api/connections', protect, connectionRoutes);
 
 
 const PORT = process.env.PORT || 5000;

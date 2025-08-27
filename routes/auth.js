@@ -2,6 +2,7 @@ import express from 'express';
 import bcrypt from 'bcrypt';
 import User from '../models/User.js';
 import dotenv from 'dotenv';
+import jwt from 'jsonwebtoken';
 import base64url from "base64url";
 import { Buffer } from "buffer";
 import {
@@ -14,6 +15,13 @@ import {
 dotenv.config();
 
 const router = express.Router();
+
+// Helper function to generate a JWT token
+const generateToken = (id) => {
+    return jwt.sign({ id }, process.env.JWT_SECRET, {
+        expiresIn: '1h', // Token expires in 1 hour
+    });
+};
 
 // Passkey configuration
 const expectedOrigin = [process.env.PASSKEY_ORIGIN];
@@ -80,6 +88,15 @@ router.post('/login', async (req, res) => {
 
         // Strip sensitive fields
         const { password: _, ...safeUser } = user.toObject();
+
+        const token = generateToken(user._id);
+
+        res.cookie('jwt', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
+            sameSite: 'strict', // Prevent CSRF attacks
+            maxAge: 3600000 // 1 hour
+        });
 
         console.log('Password login successful for:', email);
         return res.json({ user: safeUser, message: 'Password login successful' });
@@ -469,6 +486,14 @@ router.post('/users/passkey-login-challenge', async (req, res) => {
             challengeStore.delete(tempUserId);
 
             const { password: _, ...safeUser } = user.toObject();
+            const token = generateToken(user._id);
+
+            res.cookie('jwt', token, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'strict',
+                maxAge: 3600000
+            });
             return res.json({ user: safeUser, message: 'Passkey login successful' });
         }
 
@@ -482,6 +507,18 @@ router.post('/users/passkey-login-challenge', async (req, res) => {
         console.error('Error stack:', err.stack);
         res.status(500).json({ message: 'Server error', error: err.message });
     }
+});
+
+// -----------------------------
+// LOGOUT
+// -----------------------------
+router.post('/logout', (req, res) => {
+    res.cookie('jwt', '', {
+        httpOnly: true,
+        expires: new Date(0),
+        maxAge: 0 // Explicitly set maxAge to 0
+    });
+    res.status(200).json({ message: 'Logged out successfully' });
 });
 
 // -----------------------------
