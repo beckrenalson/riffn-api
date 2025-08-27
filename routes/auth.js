@@ -102,18 +102,19 @@ router.post('/login', async (req, res) => {
         res.cookie('jwt', token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
-            sameSite: 'strict', // Prevent CSRF attacks
+            sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'strict', // Changed to 'None' for cross-site in production
             maxAge: 3600000 // 1 hour
         });
 
         res.cookie('refreshToken', refreshToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
+            sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'strict', // Changed to 'None' for cross-site in production
             maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
         });
 
         console.log('Password login successful for:', email);
+        console.log('Cookies set on password login:', req.cookies); // Debugging: log cookies
         return res.json({ user: safeUser, message: 'Password login successful' });
 
     } catch (err) {
@@ -507,17 +508,18 @@ router.post('/users/passkey-login-challenge', async (req, res) => {
             res.cookie('jwt', token, {
                 httpOnly: true,
                 secure: process.env.NODE_ENV === 'production',
-                sameSite: 'strict',
+                sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'strict',
                 maxAge: 3600000
             });
 
             res.cookie('refreshToken', refreshToken, {
                 httpOnly: true,
                 secure: process.env.NODE_ENV === 'production',
-                sameSite: 'strict',
+                sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'strict',
                 maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
             });
 
+            console.log('Cookies set on passkey login:', req.cookies); // Debugging: log cookies
             return res.json({ user: safeUser, message: 'Passkey login successful' });
         }
 
@@ -569,17 +571,18 @@ router.post('/refresh-token', async (req, res) => {
         res.cookie('jwt', newToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
+            sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'strict',
             maxAge: 3600000 // 1 hour
         });
 
         res.cookie('refreshToken', newRefreshToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
+            sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'strict',
             maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
         });
 
+        console.log('Cookies set on refresh token:', req.cookies); // Debugging: log cookies
         return res.json({ message: 'Token refreshed successfully' });
 
     } catch (error) {
