@@ -112,6 +112,11 @@ router.post('/:requestId/accept', async (req, res) => {
             if (!toSolo.bands) toSolo.bands = [];
             if (!toSolo.bands.includes(fromUser._id)) toSolo.bands.push(fromUser._id); // band joining solo artist
             await toSolo.save();
+            
+            // Ensure the inviting band (fromUser) also adds the solo artist (toSolo) as a bandMember
+            if (fromUser.profileType === 'band' && !fromUser.bandMembers.includes(toSolo._id)) {
+                fromUser.bandMembers.push(toSolo._id);
+            }
         }
 
         await fromUser.save();
