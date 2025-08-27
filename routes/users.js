@@ -18,7 +18,7 @@ const expectedRPID = process.env.PASSKEY_RPID;
 // --- Cleanup expired challenges every minute ---
 const cleanupExpiredChallenges = () => {
     const now = Date.now();
-    const maxAge = 5 * 60 * 1000; // 5 minutes
+    const maxAge = 15 * 60 * 1000; // 15 minutes
 
     for (const [key, value] of challengeStore.entries()) {
         if (value.timestamp && now - value.timestamp > maxAge) {
