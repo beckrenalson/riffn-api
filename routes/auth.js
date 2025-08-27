@@ -23,6 +23,13 @@ const generateToken = (id) => {
     });
 };
 
+// Helper function to generate a Refresh Token
+const generateRefreshToken = (id) => {
+    return jwt.sign({ id }, process.env.JWT_REFRESH_SECRET, {
+        expiresIn: '7d', // Refresh token expires in 7 days
+    });
+};
+
 // Passkey configuration
 const expectedOrigin = [process.env.PASSKEY_ORIGIN];
 const expectedRPID = process.env.PASSKEY_RPID;
@@ -90,12 +97,20 @@ router.post('/login', async (req, res) => {
         const { password: _, ...safeUser } = user.toObject();
 
         const token = generateToken(user._id);
+        const refreshToken = generateRefreshToken(user._id);
 
         res.cookie('jwt', token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
             sameSite: 'strict', // Prevent CSRF attacks
             maxAge: 3600000 // 1 hour
+        });
+
+        res.cookie('refreshToken', refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
         });
 
         console.log('Password login successful for:', email);
@@ -487,6 +502,7 @@ router.post('/users/passkey-login-challenge', async (req, res) => {
 
             const { password: _, ...safeUser } = user.toObject();
             const token = generateToken(user._id);
+            const refreshToken = generateRefreshToken(user._id);
 
             res.cookie('jwt', token, {
                 httpOnly: true,
@@ -494,6 +510,14 @@ router.post('/users/passkey-login-challenge', async (req, res) => {
                 sameSite: 'strict',
                 maxAge: 3600000
             });
+
+            res.cookie('refreshToken', refreshToken, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'strict',
+                maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+            });
+
             return res.json({ user: safeUser, message: 'Passkey login successful' });
         }
 
@@ -519,6 +543,49 @@ router.post('/logout', (req, res) => {
         maxAge: 0 // Explicitly set maxAge to 0
     });
     res.status(200).json({ message: 'Logged out successfully' });
+});
+
+// -----------------------------
+// REFRESH TOKEN ENDPOINT
+// -----------------------------
+router.post('/refresh-token', async (req, res) => {
+    const refreshToken = req.cookies.refreshToken;
+
+    if (!refreshToken) {
+        return res.status(401).json({ message: 'No refresh token provided' });
+    }
+
+    try {
+        const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+
+        const user = await User.findById(decoded.id).select('-password');
+        if (!user) {
+            return res.status(401).json({ message: 'Invalid refresh token - user not found' });
+        }
+
+        const newToken = generateToken(user._id);
+        const newRefreshToken = generateRefreshToken(user._id);
+
+        res.cookie('jwt', newToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 3600000 // 1 hour
+        });
+
+        res.cookie('refreshToken', newRefreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+        });
+
+        return res.json({ message: 'Token refreshed successfully' });
+
+    } catch (error) {
+        console.error('Refresh token error:', error);
+        return res.status(401).json({ message: 'Not authorized, refresh token failed' });
+    }
 });
 
 // -----------------------------
