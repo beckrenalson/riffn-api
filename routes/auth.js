@@ -542,6 +542,11 @@ router.post('/logout', (req, res) => {
         expires: new Date(0),
         maxAge: 0 // Explicitly set maxAge to 0
     });
+    res.cookie('refreshToken', '', {
+        httpOnly: true,
+        expires: new Date(0),
+        maxAge: 0 // Explicitly set maxAge to 0
+    });
     res.status(200).json({ message: 'Logged out successfully' });
 });
 
