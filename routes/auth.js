@@ -102,14 +102,14 @@ router.post('/login', async (req, res) => {
         res.cookie('jwt', token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
-            sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'strict', // Changed to 'None' for cross-site in production
+            sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax', // Changed to 'None' for cross-site in production
             maxAge: 3600000 // 1 hour
         });
 
         res.cookie('refreshToken', refreshToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'strict', // Changed to 'None' for cross-site in production
+            sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax', // Changed to 'None' for cross-site in production
             maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
         });
 
@@ -507,14 +507,14 @@ router.post('/users/passkey-login-challenge', async (req, res) => {
             res.cookie('jwt', token, {
                 httpOnly: true,
                 secure: process.env.NODE_ENV === 'production',
-                sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'strict',
+                sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
                 maxAge: 3600000
             });
 
             res.cookie('refreshToken', refreshToken, {
                 httpOnly: true,
                 secure: process.env.NODE_ENV === 'production',
-                sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'strict',
+                sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
                 maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
             });
 
@@ -555,18 +555,24 @@ router.post('/logout', (req, res) => {
 // -----------------------------
 router.post('/refresh-token', async (req, res) => {
     const refreshToken = req.cookies.refreshToken;
+    console.log('Received refresh token request. Cookies:', req.cookies);
+    console.log('Extracted refreshToken:', refreshToken);
 
     if (!refreshToken) {
+        console.log('No refresh token provided in cookies.');
         return res.status(401).json({ message: 'No refresh token provided' });
     }
 
     try {
         const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+        console.log('Refresh token successfully decoded. Decoded ID:', decoded.id);
 
         const user = await User.findById(decoded.id).select('-password');
         if (!user) {
+            console.log('User not found for decoded ID:', decoded.id);
             return res.status(401).json({ message: 'Invalid refresh token - user not found' });
         }
+        console.log('User found for refresh token:', user.email);
 
         const newToken = generateToken(user._id);
         const newRefreshToken = generateRefreshToken(user._id);
@@ -574,22 +580,22 @@ router.post('/refresh-token', async (req, res) => {
         res.cookie('jwt', newToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'strict',
+            sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
             maxAge: 3600000 // 1 hour
         });
 
         res.cookie('refreshToken', newRefreshToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'strict',
+            sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
             maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
         });
 
-        console.log('Cookies set on refresh token:', req.cookies); // Debugging: log cookies
+        console.log('New JWT and Refresh Token cookies set.');
         return res.json({ message: 'Token refreshed successfully' });
 
     } catch (error) {
-        console.error('Refresh token error:', error);
+        console.error('Refresh token error during verification or processing:', error);
         return res.status(401).json({ message: 'Not authorized, refresh token failed' });
     }
 });

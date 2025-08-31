@@ -49,7 +49,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/tracks", trackRoutes);
 app.use('/api/subgenres', subgenreRoutes);
 app.use('/api/instruments', instrumentRoutes);
-app.use('/api/users', protect, userRoutes);
+app.use('/api/users', userRoutes);
 app.use('/api/uploads', uploadRoutes);
 app.use('/api/connections', protect, connectionRoutes);
 
