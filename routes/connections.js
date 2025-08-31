@@ -4,6 +4,25 @@ import User from '../models/User.js';
 
 const router = express.Router();
 
+// Helper to update bandMembers and bands arrays for users involved in a connection
+export async function updateUserBandArrays(fromUser, toBand, toSolo) {
+    if (toBand) {
+        if (!toBand.bandMembers.includes(fromUser._id)) toBand.bandMembers.push(fromUser._id);
+        if (!fromUser.bands.includes(toBand._id)) fromUser.bands.push(toBand._id);
+        await toBand.save();
+    }
+    if (toSolo) {
+        if (!toSolo.bands) toSolo.bands = [];
+        if (!toSolo.bands.includes(fromUser._id)) toSolo.bands.push(fromUser._id);
+        // Ensure the inviting band (fromUser) also adds the solo artist (toSolo) as a bandMember
+        if (fromUser.profileType === 'band' && !fromUser.bandMembers.includes(toSolo._id)) {
+            fromUser.bandMembers.push(toSolo._id);
+        }
+        await toSolo.save();
+    }
+    await fromUser.save();
+}
+
 // Send a connection request (band → solo or solo → band)
 router.post('/request', async (req, res) => {
     const { fromUserId, toBandId, toSoloId } = req.body;
@@ -124,6 +143,8 @@ router.post('/:requestId/accept', async (req, res) => {
         request.status = 'accepted';
         await request.save();
 
+        // Use helper function to update bandMembers and bands arrays
+        await updateUserBandArrays(fromUser, toBand, toSolo);
         res.json({ message: "Request accepted", request });
     } catch (err) {
         console.error(err);

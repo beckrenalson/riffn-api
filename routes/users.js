@@ -8,6 +8,7 @@ import ConnectionRequest from '../models/ConnectionRequest.js'; // Import Connec
 import { verifyRegistrationResponse } from "@simplewebauthn/server";
 import { isoBase64URL } from "@simplewebauthn/server/helpers";
 import challengeStore from "../utils/challengeStore.js";
+import { updateUserBandArrays } from '../routes/connections.js';
 
 dotenv.config()
 
@@ -226,49 +227,85 @@ router.delete("/:id", asyncHandler(async (req, res) => {
     res.json({ message: "User deleted" });
 }));
 
-// ADD band member
+// ADD band member - Creates an accepted ConnectionRequest
 router.post("/:id/bandMembers", asyncHandler(async (req, res) => {
     const { memberId } = req.body;
+    const bandId = req.params.id; // The ID of the band (currentUserId in frontend)
+
+    // Ensure both band and member exist
+    const band = await User.findById(bandId);
     const member = await User.findById(memberId);
+
+    if (!band) return res.status(404).json({ error: "Band not found" });
     if (!member) return res.status(404).json({ error: "Member not found" });
 
-    const updated = await User.findByIdAndUpdate(req.params.id, { $addToSet: { bandMembers: memberId } }, { new: true })
-        .populate(populateOptions)
-        .select("-password");
+    // Check if an accepted connection already exists to prevent duplicates
+    const existingAcceptedConnection = await ConnectionRequest.findOne({
+        fromUser: memberId,
+        toBand: bandId,
+        status: 'accepted',
+    });
 
-    if (!updated) return res.status(404).json({ error: "User not found" });
-    res.json(cleanUser(updated));
+    if (existingAcceptedConnection) {
+        return res.status(200).json({ message: "User is already an accepted member of this band" });
+    }
+
+    // Check for pending or rejected connections and delete them if they exist
+    await ConnectionRequest.deleteMany({
+        fromUser: memberId,
+        toBand: bandId,
+        status: { $in: ['pending', 'rejected'] },
+    });
+
+    // Create a new accepted connection request
+    const newConnectionRequest = new ConnectionRequest({
+        fromUser: memberId,
+        toBand: bandId,
+        status: 'accepted',
+        requestType: 'band_invite', // Assuming band invites the solo user
+    });
+
+    await newConnectionRequest.save();
+
+    // Manually add to bandMembers and solo user's bands (since the connection request lifecycle would normally do this)
+    // This is because we are creating an 'accepted' request directly.
+    // We need to fetch the full user objects for the helper function.
+    const fromUser = await User.findById(memberId);
+    const toBand = await User.findById(bandId);
+
+    if (fromUser && toBand) {
+        await updateUserBandArrays(fromUser, toBand, null); // Call helper, toSolo is null
+    } else {
+        console.error("Error: Could not find user or band to update arrays after creating accepted connection request.");
+    }
+
+    // Populate updated band to send back to frontend
+    const updatedBand = await User.findById(bandId).populate(populateOptions).select("-password");
+
+    res.status(200).json(cleanUser(updatedBand));
 }));
 
 // REMOVE band member
 router.delete("/:id/bandMembers/:memberId", asyncHandler(async (req, res) => {
-    const updated = await User.findByIdAndUpdate(req.params.id, { $pull: { bandMembers: req.params.memberId } }, { new: true })
+    // 1. Remove the member from the band's bandMembers array
+    const updatedBand = await User.findByIdAndUpdate(req.params.id, { $pull: { bandMembers: req.params.memberId } }, { new: true })
         .populate(populateOptions)
         .select("-password");
 
-    if (!updated) return res.status(404).json({ error: "User not found" });
+    if (!updatedBand) return res.status(404).json({ error: "Band not found" });
 
-    console.log("Band ID:", req.params.id);
-    console.log("Member ID:", req.params.memberId);
+    // 2. Remove the band from the solo user's bands array
+    await User.findByIdAndUpdate(req.params.memberId, { $pull: { bands: req.params.id } });
 
-    const deleteQuery = {
+    // 3. Delete any associated ConnectionRequests
+    await ConnectionRequest.deleteMany({
         $or: [
-            // Case 1: Member sent request to band
             { fromUser: req.params.memberId, toBand: req.params.id },
-            // Case 2: Band sent request to solo member
             { fromUser: req.params.id, toSolo: req.params.memberId },
-            // Case 3: Band sent request to another band (which is now the member)
-            { fromUser: req.params.id, toBand: req.params.memberId }
-        ]
-    };
+        ],
+    });
 
-    console.log("Delete Query:", JSON.stringify(deleteQuery));
-
-    // Delete all connection requests involving both the band (req.params.id)
-    // and the removed member (req.params.memberId), regardless of status.
-    await ConnectionRequest.deleteMany(deleteQuery);
-
-    res.json(cleanUser(updated));
+    res.json(cleanUser(updatedBand));
 }));
 
 // CENTRAL ERROR HANDLER
