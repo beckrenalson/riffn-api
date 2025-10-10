@@ -16,17 +16,6 @@ const router = express.Router();
 const expectedOrigin = [process.env.PASSKEY_ORIGIN];
 const expectedRPID = process.env.PASSKEY_RPID;
 
-const cleanupExpiredChallenges = () => {
-    const now = Date.now();
-    const maxAge = 15 * 60 * 1000;
-
-    for (const [key, value] of challengeStore.entries()) {
-        if (value.timestamp && now - value.timestamp > maxAge) {
-            challengeStore.delete(key);
-        }
-    }
-};
-setInterval(cleanupExpiredChallenges, 60000);
 
 const populateOptions = [
     { path: "bandMembers", select: "userName firstName lastName profileImage selectedInstruments selectedGenres email phone socials bio location" },
@@ -119,7 +108,6 @@ router.post(
     asyncHandler(async (req, res) => {
         const { firstName, lastName, email, password, userName, passkeyData, ...rest } = req.body;
 
-        cleanupExpiredChallenges();
 
         const existingUser = await User.findOne({
             $or: [

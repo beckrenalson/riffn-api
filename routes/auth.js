@@ -37,18 +37,6 @@ const generateTempUserId = (email) => {
     return btoa(email).replace(/[^a-zA-Z0-9]/g, '');
 };
 
-const cleanupExpiredChallenges = () => {
-    const now = Date.now();
-    const maxAge = 5 * 60 * 1000; // 5 minutes
-
-    for (const [key, value] of challengeStore.entries()) {
-        if (value.timestamp && now - value.timestamp > maxAge) {
-            challengeStore.delete(key);
-        }
-    }
-};
-
-setInterval(cleanupExpiredChallenges, 60000);
 
 const base64urlToBase64 = (base64url) => {
     return base64url.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - base64url.length % 4) % 4);
@@ -107,7 +95,6 @@ router.post("/passkey-challenge-temp", async (req, res) => {
             return res.status(400).json({ error: "Missing required fields" });
         }
 
-        cleanupExpiredChallenges();
 
         const userIdBuffer = Buffer.from(tempUserId, 'utf8');
 
@@ -153,7 +140,6 @@ router.post("/users/:userId/passkeys", async (req, res) => {
         const user = await User.findById(userId);
         if (!user) return res.status(404).json({ error: "User not found" });
 
-        cleanupExpiredChallenges();
 
         let expectedChallenge;
         let challengeKey;
