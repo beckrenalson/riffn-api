@@ -361,11 +361,15 @@ router.post('/users/passkey-login-challenge', async (req, res) => {
 router.post('/logout', (req, res) => {
     res.cookie('jwt', '', {
         httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
         expires: new Date(0),
         maxAge: 0
     });
     res.cookie('refreshToken', '', {
         httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
         expires: new Date(0),
         maxAge: 0
     });
