@@ -91,9 +91,25 @@ router.get('/status', async (req, res) => {
         let connection;
 
         if (toBandId) {
-            connection = await ConnectionRequest.findOne({ fromUser: fromUserId, toBand: toBandId });
+            // Check both directions:
+            // 1. Solo requesting to join band: fromUser = solo, toBand = band
+            // 2. Band inviting solo: fromUser = band, toSolo = solo
+            connection = await ConnectionRequest.findOne({
+                $or: [
+                    { fromUser: fromUserId, toBand: toBandId },
+                    { fromUser: toBandId, toSolo: fromUserId }
+                ]
+            });
         } else if (toSoloId) {
-            connection = await ConnectionRequest.findOne({ fromUser: fromUserId, toSolo: toSoloId });
+            // Check both directions:
+            // 1. Band inviting solo: fromUser = band, toSolo = solo
+            // 2. Solo requesting to join band: fromUser = solo, toBand = band
+            connection = await ConnectionRequest.findOne({
+                $or: [
+                    { fromUser: fromUserId, toSolo: toSoloId },
+                    { fromUser: toSoloId, toBand: fromUserId }
+                ]
+            });
         } else {
             return res.status(400).json({ message: "No valid target specified" });
         }
@@ -131,7 +147,7 @@ router.post('/:requestId/accept', async (req, res) => {
             if (!toSolo.bands) toSolo.bands = [];
             if (!toSolo.bands.includes(fromUser._id)) toSolo.bands.push(fromUser._id); // band joining solo artist
             await toSolo.save();
-            
+
             // Ensure the inviting band (fromUser) also adds the solo artist (toSolo) as a bandMember
             if (fromUser.profileType === 'band' && !fromUser.bandMembers.includes(toSolo._id)) {
                 fromUser.bandMembers.push(toSolo._id);
