@@ -11,6 +11,7 @@ import {
     generateAuthenticationOptions,
     verifyAuthenticationResponse,
 } from "@simplewebauthn/server";
+import { body, validationResult } from "express-validator";
 
 dotenv.config();
 
@@ -83,6 +84,102 @@ router.post('/login', async (req, res) => {
 
     } catch (err) {
         console.error('Login error:', err);
+        res.status(500).json({ message: 'Server error', error: err.message });
+    }
+});
+
+router.post('/signup', [
+    body("firstName").trim().notEmpty().withMessage("First name required"),
+    body("lastName").trim().notEmpty().withMessage("Last name required"),
+    body("email").isEmail().withMessage("Valid email required").normalizeEmail(),
+    body("password").isLength({ min: 8 }).withMessage("Password must be at least 8 characters long"),
+], async (req, res) => {
+    // Validate
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { firstName, lastName, email, password, userName, passkeyData, ...rest } = req.body;
+
+    try {
+        // Check if user exists
+        const existingUser = await User.findOne({
+            $or: [
+                { email },
+                { userName: userName || `${firstName}${lastName}`.toLowerCase() },
+            ],
+        });
+        if (existingUser) {
+            return res.status(409).json({ errors: [{ msg: "Email or username already in use" }] });
+        }
+
+        // Hash password
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const user = new User({
+            firstName,
+            lastName,
+            email,
+            password: hashedPassword,
+            userName: userName || `${firstName}${lastName}`.toLowerCase(),
+            ...rest,
+        });
+
+        // Handle passkey if provided
+        if (passkeyData?.tempUserId && passkeyData.credential) {
+            const challengeData = challengeStore.get(passkeyData.tempUserId);
+
+            if (challengeData) {
+                try {
+                    const verification = await verifyRegistrationResponse({
+                        response: passkeyData.credential,
+                        expectedChallenge: challengeData.challenge,
+                        expectedOrigin,
+                        expectedRPID,
+                    });
+
+                    if (verification.verified && verification.registrationInfo?.credential) {
+                        const credential = verification.registrationInfo.credential;
+                        user.passkeyId = base64url.encode(credential.id);
+                        user.publicKey = base64url.encode(credential.publicKey);
+                        user.passkeyCounter = credential.counter || 0;
+                        user.hasPasskey = true;
+                    }
+                } catch (err) {
+                    console.error("Passkey registration error:", err);
+                }
+
+                challengeStore.delete(passkeyData.tempUserId);
+            }
+        }
+
+        await user.save();
+
+        // Generate JWT tokens
+        const token = generateToken(user._id);
+        const refreshToken = generateRefreshToken(user._id);
+
+        // Set cookies
+        res.cookie('jwt', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
+            maxAge: 3600000
+        });
+
+        res.cookie('refreshToken', refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
+            maxAge: 7 * 24 * 60 * 60 * 1000
+        });
+
+        // Return user (without password)
+        const { password: _, ...safeUser } = user.toObject();
+        res.status(201).json({ ...safeUser, hasPasskey: !!user.passkeyId });
+
+    } catch (err) {
+        console.error('Signup error:', err);
         res.status(500).json({ message: 'Server error', error: err.message });
     }
 });
