@@ -57,7 +57,10 @@ router.post(
         body("email").isEmail().withMessage("Invalid email").normalizeEmail(),
         body("firstName").trim().notEmpty().withMessage("First name required"),
         body("lastName").trim().notEmpty().withMessage("Last name required"),
-        body("password").isLength({ min: 8 }).withMessage("Password must be at least 8 characters long"),
+        body("password")
+            .optional({ checkFalsy: true })
+            .isLength({ min: 8 })
+            .withMessage("Password must be at least 8 characters long"),
     ],
     handleValidation,
     asyncHandler(async (req, res) => {

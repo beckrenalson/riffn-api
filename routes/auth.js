@@ -92,7 +92,10 @@ router.post('/signup', [
     body("firstName").trim().notEmpty().withMessage("First name required"),
     body("lastName").trim().notEmpty().withMessage("Last name required"),
     body("email").isEmail().withMessage("Valid email required").normalizeEmail(),
-    body("password").isLength({ min: 8 }).withMessage("Password must be at least 8 characters long"),
+    body("password")
+        .optional({ checkFalsy: true })
+        .isLength({ min: 8 })
+        .withMessage("Password must be at least 8 characters long"),
 ], async (req, res) => {
     // Validate
     const errors = validationResult(req);
@@ -114,8 +117,19 @@ router.post('/signup', [
             return res.status(409).json({ errors: [{ msg: "Email or username already in use" }] });
         }
 
-        // Hash password
-        const hashedPassword = await bcrypt.hash(password, 10);
+        // Require either password or passkey
+        if (!password && !passkeyData) {
+            return res.status(400).json({
+                errors: [{ msg: "Either password or passkey is required" }]
+            });
+        }
+
+        // Hash password only if provided
+        let hashedPassword = null;
+        if (password) {
+            hashedPassword = await bcrypt.hash(password, 10);
+        }
+
         const user = new User({
             firstName,
             lastName,
@@ -147,6 +161,12 @@ router.post('/signup', [
                     }
                 } catch (err) {
                     console.error("Passkey registration error:", err);
+                    // If passkey fails and no password, return error
+                    if (!password) {
+                        return res.status(400).json({
+                            errors: [{ msg: "Passkey verification failed and no password provided" }]
+                        });
+                    }
                 }
 
                 challengeStore.delete(passkeyData.tempUserId);

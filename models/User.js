@@ -6,7 +6,7 @@ const userSchema = new mongoose.Schema({
     firstName: String,
     lastName: String,
     email: { type: String, required: true, unique: true, match: /\S+@\S+\.\S+/ },
-    password: { type: String, required: true, minlength: 8 },
+    password: { type: String, required: false, minlength: 8 },
     profileType: String,
     selectedInstruments: Array,
     selectedGenres: Array,
